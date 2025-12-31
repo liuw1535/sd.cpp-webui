@@ -229,13 +229,19 @@ with gr.Blocks() as txt2img_block:
             queue_update = gr.update(value=f"⏳ Jobs in queue: {q_len}", visible=True)
         else:
             queue_update = gr.update(visible=False)
+        
+        # 解密图片
+        images = state["images"]
+        if images:
+            from modules.utils.image_display import decrypt_and_display
+            images = decrypt_and_display(images)
 
         return (
             state["command"],
             state["progress"],
             state["status"],
             state["stats"],
-            state["images"],
+            images,
             timer_update,
             queue_update
         )

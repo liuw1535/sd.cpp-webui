@@ -250,6 +250,23 @@ with gr.Blocks() as options_block:
         )
         settings_map['def_gallery_sorting'] = sort_order
 
+    with gr.Accordion(label="Encryption Settings", open=False):
+        with gr.Row():
+            enable_encryption = gr.Checkbox(
+                label="Enable Image Encryption",
+                value=config.get('enable_encryption', False),
+                interactive=True
+            )
+            settings_map['enable_encryption'] = enable_encryption
+        with gr.Row():
+            encryption_password = gr.Textbox(
+                label="Encryption Password",
+                value=config.get('encryption_password', '123'),
+                interactive=True,
+                type="password"
+            )
+            settings_map['encryption_password'] = encryption_password
+
     # Folders options
     folders_ui = create_folders_opt_ui()
     settings_map.update({
