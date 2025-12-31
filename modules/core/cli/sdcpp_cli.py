@@ -27,6 +27,8 @@ class CommandRunner(CommonRunner):
         self.outputs = []
         self.output_path = ""
         self.preview_path = None
+        self.enable_encryption = config.get('enable_encryption', False)
+        self.encryption_password = config.get('encryption_password', '123')
 
     def _set_output_path(self, dir_key: str, subctrl_id: int, extension: str):
         """Determines and sets the output path for the command."""
@@ -85,6 +87,9 @@ class CommandRunner(CommonRunner):
             '-o', self.output_path
             # --output-begin-idx - to implement
         ])
+        
+        if self.enable_encryption:
+            self.command.extend(['--encrypt', self.encryption_password])
 
     def _prepare_for_run(self):
         """
