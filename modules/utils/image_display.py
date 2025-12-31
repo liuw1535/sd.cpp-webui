@@ -2,6 +2,8 @@
 
 import os
 
+from PIL import Image
+
 from modules.shared_instance import config
 from modules.utils.encryption import ImageEncryption
 
@@ -17,7 +19,7 @@ def decrypt_and_display(image_paths):
         image_paths: 图片路径列表或单个路径
     
     Returns:
-        解密后的 PIL Image 对象列表
+        解密后的 PIL Image 对象或列表
     """
     if not isinstance(image_paths, (str, list, tuple)):
         return image_paths
@@ -30,7 +32,8 @@ def decrypt_and_display(image_paths):
     password = config.get('encryption_password', '123')
     encryptor = ImageEncryption(password)
     
-    if isinstance(image_paths, str):
+    is_single = isinstance(image_paths, str)
+    if is_single:
         image_paths = [image_paths]
     else:
         image_paths = list(image_paths)
@@ -46,8 +49,11 @@ def decrypt_and_display(image_paths):
                 decrypted_images.append(img)
             except Exception as e:
                 print(f"Failed to decrypt {path}: {e}")
-                decrypted_images.append(path)
+                try:
+                    decrypted_images.append(Image.open(path))
+                except Exception:
+                    decrypted_images.append(path)
         else:
             decrypted_images.append(path)
     
-    return decrypted_images if len(decrypted_images) > 1 else decrypted_images[0]
+    return decrypted_images[0] if is_single else decrypted_images
