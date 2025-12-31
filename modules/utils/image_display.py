@@ -27,6 +27,7 @@ def decrypt_and_display(image_paths):
     if is_single:
         image_paths = [image_paths]
     
+    from PIL import Image
     decrypted_images = []
     for path in image_paths:
         if path and os.path.exists(path):
@@ -34,10 +35,12 @@ def decrypt_and_display(image_paths):
                 img = encryptor.decrypt_image_file(path)
                 decrypted_images.append(img)
             except Exception as e:
-                print(f"Failed to decrypt {path}: {e}")
-                from PIL import Image
-                decrypted_images.append(Image.open(path))
+                print(f"Failed to decrypt {path}: {e}, trying direct open")
+                try:
+                    decrypted_images.append(Image.open(path))
+                except Exception as e2:
+                    print(f"Failed to open {path}: {e2}")
         else:
-            decrypted_images.append(None)
+            print(f"Path does not exist: {path}")
     
     return decrypted_images[0] if is_single else decrypted_images

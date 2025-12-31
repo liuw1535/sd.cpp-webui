@@ -235,11 +235,18 @@ with gr.Blocks() as txt2img_block:
         if images:
             from modules.utils.image_display import decrypt_and_display
             if isinstance(images, list):
-                images = [decrypt_and_display(img) if isinstance(img, str) else img for img in images]
+                decrypted = []
+                for img in images:
+                    if isinstance(img, str):
+                        result = decrypt_and_display(img)
+                        if result:
+                            decrypted.append(result)
+                    else:
+                        decrypted.append(img)
+                images = decrypted if decrypted else images
             else:
-                images = decrypt_and_display(images)
-                if not isinstance(images, list):
-                    images = [images]
+                result = decrypt_and_display(images)
+                images = [result] if result else images
 
         return (
             state["command"],
