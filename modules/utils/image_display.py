@@ -48,10 +48,11 @@ def decrypt_and_display(image_paths):
                 img = encryptor.decrypt_image_file(path)
                 decrypted_images.append(img)
             except Exception as e:
-                print(f"Failed to decrypt {path}: {e}")
+                print(f"Failed to decrypt {path}: {e}, trying direct open")
                 try:
                     decrypted_images.append(Image.open(path))
-                except Exception:
+                except Exception as e2:
+                    print(f"Failed to open {path}: {e2}")
                     decrypted_images.append(path)
         else:
             decrypted_images.append(path)
