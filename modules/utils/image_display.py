@@ -57,4 +57,7 @@ def decrypt_and_display(image_paths):
         else:
             decrypted_images.append(path)
     
+    if not decrypted_images:
+        return None if is_single else []
+
     return decrypted_images[0] if is_single else decrypted_images
