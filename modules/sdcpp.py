@@ -178,8 +178,8 @@ class CommandRunner:
             self.outputs = [self.output_path]
         else:
             base, ext = os.path.splitext(self.output_path)
-            self.outputs = [self.output_path] + [
-                f"{base}_{i}{ext}" for i in range(2, batch_count + 1)
+            self.outputs = [
+                f"{base}_{i}{ext}" for i in range(batch_count)
             ]
 
     def build_command(self):

@@ -243,10 +243,10 @@ with gr.Blocks() as txt2img_block:
                             decrypted.append(result)
                     else:
                         decrypted.append(img)
-                images = decrypted if decrypted else images
+                images = decrypted if decrypted else None
             else:
                 result = decrypt_and_display(images)
-                images = [result] if result else images
+                images = result
 
         return (
             state["command"],

@@ -43,4 +43,7 @@ def decrypt_and_display(image_paths):
         else:
             print(f"Path does not exist: {path}")
     
+    if not decrypted_images:
+        return None if is_single else []
+    
     return decrypted_images[0] if is_single else decrypted_images
