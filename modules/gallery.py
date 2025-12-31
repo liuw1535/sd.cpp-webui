@@ -14,6 +14,7 @@ from modules.utils.metadata_utils import (
     parse_png_metadata, parse_jpg_metadata,
     extract_params_from_text
 )
+from modules.utils.image_display import decrypt_and_display
 
 
 PAGE_SIZE = 16
@@ -104,6 +105,8 @@ class GalleryManager:
 
         page_files = files[start_index:end_index]
 
+        display_files = decrypt_and_display(page_files)
+
         dir_map = {
             0: 'txt2img',
             1: 'img2img',
@@ -120,7 +123,7 @@ class GalleryManager:
 
         return (
             gr.Gallery(
-                value=page_files,
+                value=display_files,
                 label=current_label,
                 selected_index=selected_index
             ),

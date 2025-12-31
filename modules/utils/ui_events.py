@@ -8,6 +8,7 @@ import modules.utils.queue as queue_manager
 from modules.shared_instance import (
     sd_options, model_state
 )
+from modules.utils.image_display import decrypt_and_display
 
 
 _polling_configs = []
@@ -94,7 +95,9 @@ def bind_generation_pipeline(
         else:
             queue_display = gr.update(visible=False, value="")
 
-        if imgs is None:
+        if imgs:
+            imgs = decrypt_and_display(imgs)
+        elif imgs is None:
             imgs = gr.update(value=None)
 
         return (

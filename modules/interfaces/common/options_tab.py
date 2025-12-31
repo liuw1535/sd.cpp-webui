@@ -262,6 +262,27 @@ with gr.Blocks() as options_block:
                 )
             )
 
+        with gr.Accordion(label="Encryption Settings", open=False):
+            with gr.Row():
+                registry.register(
+                    'enable_encryption',
+                    gr.Checkbox(
+                        label="Enable Image Encryption",
+                        value=config.get('enable_encryption', False),
+                        interactive=True
+                    )
+                )
+            with gr.Row():
+                registry.register(
+                    'encryption_password',
+                    gr.Textbox(
+                        label="Encryption Password",
+                        value=config.get('encryption_password', '123'),
+                        interactive=True,
+                        type="password"
+                    )
+                )
+
     with gr.Row():
         refresh_opt = gr.Button(
             value="Refresh sd options"
