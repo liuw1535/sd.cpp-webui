@@ -36,6 +36,8 @@ class CommandRunner:
         self.outputs = []
         self.output_path = ""
         self.preview_path = None
+        self.enable_encryption = config.get('enable_encryption', False)
+        self.encryption_password = config.get('encryption_password', '123')
 
     def _extract_env_vars(self) -> Dict[str, Any]:
         """
@@ -139,6 +141,9 @@ class CommandRunner:
             '--lora-apply-mode', str(self._get_param('in_lora_apply')),
             '-o', self.output_path
         ])
+        
+        if self.enable_encryption:
+            self.command.extend(['--encrypt', self.encryption_password])
 
     def _add_options(self, options: Dict[str, Any]):
         """Adds key-value options to the command if the value is not None."""
