@@ -4,6 +4,7 @@ import gradio as gr
 
 from modules.shared_instance import config
 from .constants import RELOAD_SYMBOL
+from .lora_selector import create_lora_selector_ui
 
 
 def create_prompts_ui(nprompt_support = True):
@@ -55,6 +56,9 @@ def create_prompts_ui(nprompt_support = True):
                     save_prompt_btn = gr.Button(
                         value="Save prompt", size="lg",
                     )
+    # LoRA Selector
+    lora_ui = create_lora_selector_ui()
+    
     with gr.Row():
         pprompt = gr.Textbox(
             placeholder="Positive prompt\nUse loras from the loras folder with: <lora:lora_name:lora_strenght>, for example: <lora:anime:0.8>",
@@ -94,6 +98,19 @@ def create_prompts_ui(nprompt_support = True):
         config.get_prompt,
         inputs=[saved_prompts],
         outputs=[pprompt, nprompt]
+    )
+    
+    # LoRA selector bindings
+    lora_ui['insert_btn'].click(
+        lora_ui['insert_lora_fn'],
+        inputs=[pprompt, lora_ui['lora_dropdown'], lora_ui['lora_strength']],
+        outputs=[pprompt]
+    )
+    
+    lora_ui['refresh_btn'].click(
+        lora_ui['refresh_loras_fn'],
+        inputs=[],
+        outputs=[lora_ui['lora_dropdown']]
     )
 
     return {
