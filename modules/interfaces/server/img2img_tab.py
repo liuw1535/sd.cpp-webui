@@ -9,15 +9,21 @@ from modules.core.server.manager import (
     start_server, stop_server
 )
 from modules.core.server.status_monitor import server_status_monitor_wrapper
+from modules.utils.image_utils import size_updater
 from modules.utils.ui_events import (
     get_ordered_inputs, bind_generation_pipeline,
-    apply_lora, unet_tab_switch, ckpt_tab_switch,
+    unet_tab_switch, ckpt_tab_switch,
     update_interactivity, refresh_all_options
 )
 from modules.shared_instance import config
 from modules.ui.models import create_img_model_sel_ui
-from modules.ui.loras import create_lora_sel_ui
+from modules.ui.loras import (
+    create_lora_sel_ui, bind_lora_events
+)
 from modules.ui.prompts import create_prompts_ui
+from modules.ui.presets import (
+    create_presets_ui, bind_presets_events
+)
 from modules.ui.generation_settings import (
     create_quant_ui, create_generation_settings_ui,
     create_bottom_generation_settings_ui
@@ -156,7 +162,7 @@ with gr.Blocks()as img2img_server_block:
                         value="Stopped (No Model Loaded)",
                         interactive=False
                     )
-                    server_status_timer = gr.Timer(value=0.1, active=True)
+                    server_status_timer = gr.Timer(value=1, active=False)
 
     # Loras
     lora_ui = create_lora_sel_ui()
@@ -169,6 +175,8 @@ with gr.Blocks()as img2img_server_block:
     # Settings
     with gr.Row():
         with gr.Column(scale=1):
+
+            presets_ui = create_presets_ui()
 
             with gr.Tab("Generation Settings"):
 
@@ -231,6 +239,14 @@ with gr.Blocks()as img2img_server_block:
                     sources="upload", type="filepath"
                 )
                 inputs_map['in_img_inp'] = img_inp_img2img_server
+            with gr.Row():
+                with gr.Accordion(label="Mask", open=False):
+                    img_mask = gr.ImageEditor(
+                        sources="upload",
+                        type="filepath",
+                        layers=False
+                    )
+                inputs_map['in_img_mask'] = img_mask
             with gr.Group():
                 with gr.Row():
                     gen_btn = gr.Button(
@@ -293,13 +309,13 @@ with gr.Blocks()as img2img_server_block:
     server_start.click(
         fn=start_server_wrapper,
         inputs=ordered_components,
-        outputs=[server_status, gen_btn]
+        outputs=[server_status, server_status_timer, gen_btn]
     )
 
     server_stop.click(
         fn=stop_server,
         inputs=[],
-        outputs=[server_status, gen_btn]
+        outputs=[server_status, server_status_timer, gen_btn]
     )
 
     server_status_timer.tick(
@@ -308,7 +324,11 @@ with gr.Blocks()as img2img_server_block:
         outputs=[server_status, gen_btn, progress_slider, progress_textbox]
     )
 
-    timer = gr.Timer(value=0.1, active=True)
+    bind_lora_events(lora_ui, prompts_ui)
+
+    bind_presets_events(presets_ui, generation_settings_ui)
+
+    timer = gr.Timer(value=0.1, active=False)
 
     ui_outputs = {
         'gen_btn': gen_btn,
@@ -323,18 +343,6 @@ with gr.Blocks()as img2img_server_block:
 
     bind_generation_pipeline(
         img2img_api, ordered_keys, ordered_components, ui_outputs
-    )
-
-    lora_ui['in_apply_lora_btn'].click(
-        apply_lora,
-        inputs=[
-            lora_ui['in_lora_model'], lora_ui['in_lora_strength'],
-            lora_ui['in_lora_prompt_switch'],
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ],
-        outputs=[
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ]
     )
 
     # Interactive Bindings
@@ -376,6 +384,7 @@ with gr.Blocks()as img2img_server_block:
             generation_settings_ui['in_flow_shift']
         ]
     )
+
     refresh_opt.click(
         refresh_all_options,
         inputs=[],
@@ -390,6 +399,15 @@ with gr.Blocks()as img2img_server_block:
         partial(update_interactivity, len(cfg_comp)),
         inputs=img_cfg_bool,
         outputs=cfg_comp
+    )
+
+    img_inp_img2img_server.change(
+        size_updater,
+        inputs=img_inp_img2img_server,
+        outputs=[
+            generation_settings_ui['in_width'],
+            generation_settings_ui['in_height']
+        ]
     )
 
     img2img_server_params['pprompt'] = prompts_ui['in_pprompt']

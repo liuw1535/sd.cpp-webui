@@ -9,7 +9,7 @@ from modules.utils.ui_events import (
     get_ordered_inputs, update_interactivity
 )
 from modules.utils.image_utils import (
-    switch_sizes, size_extractor
+    switch_sizes, size_updater
 )
 from modules.shared_instance import (
     config, subprocess_manager
@@ -90,6 +90,13 @@ with gr.Blocks() as upscale_block:
                 maximum=5,
                 value=1,
                 step=1
+            )
+            upscl_tile_size = gr.Number(
+                label="Tile size for ESRGAN",
+                minimum=1,
+                maximum=4096,
+                value=128,
+                step=1,
             )
             with gr.Row():
                 with gr.Accordion(
@@ -172,6 +179,7 @@ with gr.Blocks() as upscale_block:
         'in_init_width': init_width,
         'in_init_height': init_height,
         'in_upscl_rep': upscl_rep,
+        'in_upscl_tile_size': upscl_tile_size,
         'in_output': output,
         'in_flash_attn': flash_attn,
         'in_diffusion_conv_direct': diffusion_conv_direct,
@@ -190,17 +198,6 @@ with gr.Blocks() as upscale_block:
         # This line programmatically creates the dictionary.
         params = dict(zip(ordered_keys, args))
         yield from upscale(params)
-
-    def size_updater(img_inp):
-        if img_inp is None:
-            return (
-                gr.update(), gr.update()
-            )
-        else:
-            width, height = size_extractor(img_inp)
-            return (
-                gr.update(value=int(width)), gr.update(value=int(height))
-            )
 
     # Interactive Bindings
     img_inp_upscale.change(

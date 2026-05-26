@@ -9,7 +9,7 @@ from typing import Dict, Any, Generator
 import gradio as gr
 
 from modules.core.common.sd_common import (
-    DiffusionMode, CommonRunner
+    DiffusionMode, CommonRunner, process_editor_mask
 )
 from modules.utils.sdcpp_utils import generate_output_filename
 from modules.shared_instance import (
@@ -37,8 +37,17 @@ class CommandRunner(CommonRunner):
         output_scheme = config.get('def_output_scheme')
 
         if filename_override and str(filename_override).strip():
-            filename = f"{filename_override}.{extension}"
-            self.output_path = os.path.join(output_dir, filename)
+            base_name = str(filename_override).strip()
+            filename = f"{base_name}.{extension}"
+            test_path = os.path.join(output_dir, filename)
+
+            counter = 1
+            while os.path.exists(test_path):
+                filename = f"{base_name}_{counter}.{extension}"
+                test_path = os.path.join(output_dir, filename)
+                counter += 1
+
+            self.output_path = test_path
             return
 
         name_parts = []
@@ -76,6 +85,7 @@ class CommandRunner(CommonRunner):
             '--sampler-rng', str(self._get_param('in_sampler_rng')),
             '--lora-apply-mode', str(self._get_param('in_lora_apply')),
             '-o', self.output_path
+            # --output-begin-idx - to implement
         ])
         
         if self.enable_encryption:
@@ -264,7 +274,9 @@ class ImageGenerationRunner(CommandRunner):
             # Upscale
             **({
                 '--upscale-model': self._get_param('f_upscl'),
-                '--upscale-repeats': self._get_param('in_upscl_rep')
+                '--upscale-repeats': self._get_param('in_upscl_rep'),
+                '--upscale-tile-size': self._get_param('in_upscl_tile_size'),
+
             } if self._get_param('in_upscl_bool') else {}),
             # ControlNet
             **({
@@ -276,6 +288,19 @@ class ImageGenerationRunner(CommandRunner):
             '--chroma-t5-mask-pad': (self._get_param('in_t5_mask_pad')
                                      if self._get_param('in_enable_t5_mask')
                                      else None),
+            # Skip Layer Guidance (SLG)
+            **({
+                '--slg-scale': self._get_param('in_slg_scale'),
+                '--skip-layer-start': self._get_param('in_skip_layer_start'),
+                '--skip-layer-end': self._get_param('in_skip_layer_end'),
+                '--skip-layers': (self._get_param('in_skip_layers')
+                                  if self._get_param('in_skip_layers') != ""
+                                  else None),
+            } if self._get_param('in_slg_bool') else {}),
+            # Performance
+            '--max-vram': (self._get_param('in_max_vram')
+                           if self._get_param('in_max_vram') != 0
+                           else None),
             # VAE Tiling
             **({
                 '--vae-tile-overlap': self._get_param('in_vae_tile_overlap'),
@@ -296,11 +321,6 @@ class ImageGenerationRunner(CommandRunner):
             # Cache
             **({
                 '--cache-mode': self._get_param('in_cache_mode'),
-                '--cache-preset': (
-                    self._get_param('in_cache_dit_preset')
-                    if self._get_param('in_cache_dit_preset') != "none"
-                    else None
-                ),
                 '--cache-option': (
                     val.strip('"')
                     if (val := self._get_param('in_cache_option')) and str(val).strip('"') != ""
@@ -334,6 +354,10 @@ class ImageGenerationRunner(CommandRunner):
             '--preview-noisy': (self._get_param('in_preview_noisy')
                                 if self._get_param('in_preview_bool')
                                 else False),
+            '--increase-ref-index': self._get_param('in_increase_ref_index'),
+            '--disable-auto-resize-ref-image': self._get_param(
+                'in_disable_auto_resize_ref_image'
+            ),
         })
         self._add_flags(flags)
 
@@ -362,7 +386,22 @@ class Img2ImgRunner(ImageGenerationRunner):
             str(self._get_param('in_strength'))
         ])
 
+        mask_input = self._get_param('in_img_mask') or self._get_param('in_mask')
+        mask_img = process_editor_mask(mask_input)
+        final_mask_path = None
+
+        if mask_img is not None:
+            # The CLI requires a file path, so we save the PIL Image to disk
+            output_dir = config.get('img2img_dir')
+            final_mask_path = os.path.join(output_dir, "sdcpp_temp_mask.png")
+
+            try:
+                mask_img.save(final_mask_path)
+            except Exception as e:
+                print(f"Error saving temporary mask for CLI: {e}")
+                final_mask_path = None
         options = {
+            '--mask': final_mask_path,
             '--img-cfg-scale': (self._get_param('in_img_cfg')
                                 if self._get_param('in_img_cfg_bool')
                                 else None),
@@ -377,9 +416,26 @@ class ImgEditRunner(ImageGenerationRunner):
         super().build_command(
             output_dir_key='imgedit_dir', subctrl_id=2
         )
-        self.command.extend(
-            ['--ref-image', str(self._get_param('in_ref_img'))]
-        )
+
+        ref_imgs = self._get_param('in_ref_img')
+
+        if not ref_imgs:
+            return
+
+        if not isinstance(ref_imgs, list):
+            ref_imgs = [ref_imgs]
+
+        for img in ref_imgs:
+            if isinstance(img, tuple):
+                img_path = img[0]
+            elif isinstance(img, dict) and "name" in img:
+                img_path = img["name"]
+            else:
+                img_path = str(img)
+
+            self.command.extend(
+                ['--ref-image', img_path]
+            )
 
 
 class Any2VideoRunner(CommandRunner):
@@ -388,6 +444,7 @@ class Any2VideoRunner(CommandRunner):
     def _add_base_args(self):
         # Override to add video-specific base arguments
         super()._add_base_args()
+
         self.command.extend([
             '--video-frames', str(self._get_param('in_frames')),
             '--fps', str(self._get_param('in_fps')),
@@ -395,7 +452,7 @@ class Any2VideoRunner(CommandRunner):
 
     def build_command(self):
         self._resolve_paths()
-        self._set_output_path('any2video_dir', 3, 'avi')
+        self._set_output_path('any2video_dir', 3, 'webm')
 
         self.command.extend(['-p', self._get_param('in_pprompt', "")])
         if self._get_param('in_nprompt'):
@@ -405,26 +462,99 @@ class Any2VideoRunner(CommandRunner):
 
         init_img = (self._get_param('in_img_inp')
                     or self._get_param('in_first_frame_inp'))
+
+        use_high_noise = self._get_param('in_high_noise_bool')
+        high_noise_model = self._get_param('f_high_noise_model')
+
         options = {
             # VAE
             '--vae': self._get_param('f_unet_vae'),
+            '--audio-vae': self._get_param('f_audio_vae'),
             # Wan2.1, Wan2.2
             '--diffusion-model': self._get_param('f_unet_model'),
             '--clip_vision': self._get_param('f_clip_vision_h'),
             '--t5xxl': self._get_param('f_umt5_xxl'),
+            # LTX-2.3
+            '--llm': self._get_param('f_llm'),
+            '--embeddings-connectors': self._get_param('f_emb_connect'),
+            # Wan2.2 High Noise Configuration
             '--high-noise-diffusion-model': (
-                self._get_param('f_high_noise_model')
+                high_noise_model
+                if use_high_noise else None
             ),
-            # TAESD
-            '--taesd': self._get_param('f_taesd'),
+            '--high-noise-cfg-scale': (
+                self._get_param('in_high_noise_cfg')
+                if use_high_noise else None
+            ),
+            '--high-noise-sampling-method': (
+                self._get_param('in_high_noise_sampling')
+                if use_high_noise else None
+            ),
+            '--high-noise-steps': (
+                self._get_param('in_high_noise_steps')
+                if use_high_noise else None
+            ),
+            '--high-noise-img-cfg-scale': (
+                self._get_param('in_high_noise_img_cfg')
+                if use_high_noise else None
+            ),
+            '--high-noise-guidance': (
+                self._get_param('in_high_noise_guidance')
+                if use_high_noise else None
+            ),
+            '--high-noise-slg-scale': (
+                self._get_param('in_high_noise_slg_scale')
+                if use_high_noise else None
+            ),
+            '--high-noise-skip-layer-start': (
+                self._get_param('in_high_noise_skip_layer_start')
+                if use_high_noise else None
+            ),
+            '--high-noise-skip-layer-end': (
+                self._get_param('in_high_noise_skip_layer_end')
+                if use_high_noise else None
+            ),
+            '--high-noise-eta': (
+                self._get_param('in_high_noise_eta')
+                if use_high_noise else None
+            ),
+            '--high-noise-skip-layers': (
+                self._get_param('in_high_noise_skip_layers')
+                if use_high_noise else None
+            ),
+            # Skip Layer Guidance (SLG)
+            **({
+                '--slg-scale': self._get_param('in_slg_scale'),
+                '--skip-layer-start': self._get_param('in_skip_layer_start'),
+                '--skip-layer-end': self._get_param('in_skip_layer_end'),
+                '--skip-layers': (self._get_param('in_skip_layers')
+                                  if self._get_param('in_skip_layers') != ""
+                                  else None),
+            } if self._get_param('in_slg_bool') else {}),
+            # Wan & MoE Specifics
+            '--moe-boundary': (self._get_param('in_moe_boundary')
+                               if self._get_param('in_moe_boundary_bool')
+                               else None),
+            '--vace-strength': (self._get_param('in_vace_strength')
+                                if self._get_param('in_vace_strength_bool')
+                                else None),
+            # Inputs for I2V, FLF2V, and VACE V2V
             '--init-img': init_img,
             '--end-img': self._get_param('in_last_frame_inp'),
+            '--control-video': self._get_param('in_control_video_dir'),
+            # TAESD
+            '--taesd': self._get_param('f_taesd'),
+            # Upscaling
             '--upscale-model': (self._get_param('f_upscl')
                                 if self._get_param('in_upscl_bool')
                                 else None),
             '--upscale-repeats': (self._get_param('in_upscl_rep')
                                   if self._get_param('in_upscl_bool')
                                   else None),
+            '--upscale-tile-size': (self._get_param('in_upscl_tile_size')
+                                    if self._get_param('in_upscl_bool')
+                                    else None),
+            # Additional Params
             '--type': (self._get_param('in_model_type')
                        if self._get_param('in_model_type') != "Default"
                        else None),
@@ -455,6 +585,8 @@ class Any2VideoRunner(CommandRunner):
             '--preview-noisy': (self._get_param('in_preview_noisy')
                                 if self._get_param('in_preview_bool')
                                 else False),
+            # LTX Specifics
+            '--temporal-tiling': self._get_param('in_temporal_tiling'),
         })
         self._add_flags(flags)
 
@@ -474,6 +606,7 @@ class UpscaleRunner(CommandRunner):
             '-W': self._get_param('in_init_width'),
             '-H': self._get_param('in_init_height'),
             '--upscale-repeats': self._get_param('in_upscl_rep'),
+            '--upscale-tile-size': self._get_param('in_upscl_tile_size'),
             '-o': self.output_path,
         }
         self._add_options(options)
@@ -525,6 +658,7 @@ def convert(params: dict):
     in_model_dir = params.get('in_model_dir')
     in_quant_type = params.get('in_quant_type')
     in_tensor_type_rules = params.get('in_tensor_type_rules')
+    in_convert_name = params.get('in_convert_name', False)
     in_gguf_name = params.get('in_gguf_name')
     in_color = params.get('in_color', True)
     in_verbose = params.get('in_verbose', False)
@@ -550,6 +684,8 @@ def convert(params: dict):
 
     if in_tensor_type_rules:
         command.extend(['--tensor-type-rules', in_tensor_type_rules])
+    if in_convert_name:
+        command.append('--convert-name')
     if in_color:
         command.append('--color')
     if in_verbose:

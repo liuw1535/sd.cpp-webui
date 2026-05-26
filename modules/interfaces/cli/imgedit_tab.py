@@ -3,22 +3,30 @@
 import gradio as gr
 
 from modules.core.cli.sdcpp_cli import imgedit
+from modules.utils.image_utils import size_updater
 from modules.utils.ui_events import (
     get_ordered_inputs, bind_generation_pipeline,
-    apply_lora, refresh_all_options
+    refresh_all_options
 )
 from modules.shared_instance import (
     config, subprocess_manager
 )
 from modules.ui.models import create_imgedit_model_sel_ui
-from modules.ui.loras import create_lora_sel_ui
+from modules.ui.loras import (
+    create_lora_sel_ui, bind_lora_events
+)
 from modules.ui.prompts import create_prompts_ui
+from modules.ui.presets import (
+    create_presets_ui, bind_presets_events
+)
 from modules.ui.generation_settings import (
     create_quant_ui, create_generation_settings_ui,
     create_bottom_generation_settings_ui
 )
 from modules.ui.upscale import create_upscl_ui
 from modules.ui.controlnet import create_cnnet_ui
+from modules.ui.ref_img import create_ref_img_ui
+from modules.ui.slg import create_slg_ui
 from modules.ui.qwen import create_qwen_ui
 from modules.ui.circular import create_circular_ui
 from modules.ui.photomaker import create_photomaker_ui
@@ -66,6 +74,8 @@ with gr.Blocks() as imgedit_block:
     with gr.Row():
         with gr.Column(scale=1):
 
+            presets_ui = create_presets_ui()
+
             with gr.Tab("Generation Settings"):
 
                 generation_settings_ui = create_generation_settings_ui(unet_mode=True)
@@ -83,6 +93,14 @@ with gr.Blocks() as imgedit_block:
                 # ControlNet
                 cnnet_ui = create_cnnet_ui()
                 inputs_map.update(cnnet_ui)
+
+                # Reference Image Settings
+                ref_img_ui = create_ref_img_ui()
+                inputs_map.update(ref_img_ui)
+
+                # Skip Layer Guidance
+                slg_ui = create_slg_ui()
+                inputs_map.update(slg_ui)
 
                 # Qwen
                 qwen_ui = create_qwen_ui()
@@ -142,8 +160,12 @@ with gr.Blocks() as imgedit_block:
         # Output
         with gr.Column(scale=1):
             with gr.Row():
-                ref_img_imgedit = gr.Image(
-                    sources="upload", type="filepath"
+                ref_img_imgedit = gr.Gallery(
+                    label="Reference Images",
+                    interactive=True,
+                    type="filepath",
+                    object_fit="contain",
+                    height="auto"
                 )
                 inputs_map['in_ref_img'] = ref_img_imgedit
             with gr.Group():
@@ -203,7 +225,16 @@ with gr.Blocks() as imgedit_block:
 
     ordered_keys, ordered_components = get_ordered_inputs(inputs_map)
 
-    timer = gr.Timer(value=0.1, active=True)
+    bind_lora_events(lora_ui, prompts_ui)
+
+    is_loading_preset = gr.State(value=False)
+
+    bind_presets_events(
+        presets_ui, generation_settings_ui, model_ui,
+        preset_flag=is_loading_preset
+    )
+
+    timer = gr.Timer(value=0.1, active=False)
 
     ui_outputs = {
         'gen_btn': gen_btn,
@@ -226,18 +257,6 @@ with gr.Blocks() as imgedit_block:
         outputs=[]
     )
 
-    lora_ui['in_apply_lora_btn'].click(
-        apply_lora,
-        inputs=[
-            lora_ui['in_lora_model'], lora_ui['in_lora_strength'],
-            lora_ui['in_lora_prompt_switch'],
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ],
-        outputs=[
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ]
-    )
-
     refresh_opt.click(
         refresh_all_options,
         inputs=[],
@@ -245,6 +264,15 @@ with gr.Blocks() as imgedit_block:
             generation_settings_ui['in_sampling'],
             generation_settings_ui['in_scheduler'],
             preview_ui['in_preview_mode'], extras_ui['in_predict']
+        ]
+    )
+
+    ref_img_imgedit.change(
+        size_updater,
+        inputs=ref_img_imgedit,
+        outputs=[
+            generation_settings_ui['in_width'],
+            generation_settings_ui['in_height']
         ]
     )
 

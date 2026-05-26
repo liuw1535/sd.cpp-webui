@@ -6,8 +6,46 @@ import gradio as gr
 
 import modules.utils.queue as queue_manager
 from modules.shared_instance import (
-    sd_options, model_state, current_mode
+    sd_options, model_state
 )
+
+
+_polling_configs = []
+
+
+def _decrypt_images_for_display(images):
+    if not images:
+        return images
+
+    from modules.utils.image_display import decrypt_and_display
+
+    image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+
+    if isinstance(images, list):
+        decrypted = []
+        for img in images:
+            if isinstance(img, str):
+                if not img.lower().endswith(image_extensions):
+                    decrypted.append(img)
+                    continue
+
+                result = decrypt_and_display(img)
+                if result is not None:
+                    decrypted.append(result)
+                else:
+                    decrypted.append(img)
+            else:
+                decrypted.append(img)
+        return decrypted
+
+    if isinstance(images, str):
+        if not images.lower().endswith(image_extensions):
+            return images
+
+        result = decrypt_and_display(images)
+        return result if result is not None else images
+
+    return images
 
 
 def get_ordered_inputs(inputs_map):
@@ -23,79 +61,86 @@ def bind_generation_pipeline(
     """
     Connects the UI components to the generation queue.
     """
+    tab_id = api_func.__name__
 
     def submit_job(*args):
         params = dict(zip(ordered_keys, args))
 
-        queue_manager.add_job(api_func, params)
+        current_state = queue_manager.get_status()
+        already_running = current_state.get("is_running", False)
 
-        q_len = queue_manager.get_queue_size()
+        queue_manager.add_job(api_func, params, owner=tab_id)
 
-        print(f"\n\nJob submitted! Position in queue: {q_len}.\n"),
+        if already_running:
+            return (
+                gr.skip(),
+                gr.skip(),
+            )
 
         return (
             gr.update(visible=True, value=0),
-            gr.update(visible=True, value="Added to queue...")
+            gr.update(visible=True, value="Added to queue..."),
         )
 
     def poll_status():
         state = queue_manager.get_status()
         q_len = queue_manager.get_queue_size()
+        just_finished = queue_manager.consume_finished()
 
-        if not state["is_running"] and q_len == 0:
-            if state.get("is_finished"):
-                state["is_finished"] = False
-            else:
-                return (
-                    gr.skip(),
-                    gr.skip(),
-                    gr.skip(),
-                    gr.skip(),
-                    gr.skip(),
-                    gr.skip(),
-                    gr.skip(),
-                )
+        owner = state.get("owner")
+        is_running = state.get("is_running")
+        imgs = state.get("images", None)
 
-        prog = state["progress"]
-        stat = state["status"]
+        if just_finished and q_len == 0 and not is_running:
+            timer_update = gr.update(active=False)
+        elif q_len > 0 or is_running:
+            timer_update = gr.update(active=True)
+        else:
+            timer_update = gr.skip()
 
-        if not state["is_running"] and q_len > 0:
-            prog = gr.skip()
-            stat = gr.skip()
-        elif prog == 0:
-            prog = gr.skip()
-            stat = gr.skip()
+        if not just_finished and ((owner != tab_id and not is_running) or (not is_running and q_len == 0)):
+            return (
+                gr.skip(),
+                gr.skip(),
+                gr.skip(),
+                gr.skip(),
+                gr.skip(),
+                timer_update,
+                gr.skip()
+            )
 
-        queue_display = gr.update(
-            value=f"⏳ Jobs in queue: {q_len}" if q_len > 0 else "",
-            visible=(q_len > 0)
-        )
+        prog = state.get("progress", 0)
+        stat = state.get("status", "")
+        cmd = state.get("command", "")
+        stats = state.get("stats", "")
 
-        # 解密图片
-        images = state["images"]
-        if images:
-            from modules.utils.image_display import decrypt_and_display
-            if isinstance(images, list):
-                decrypted = []
-                for img in images:
-                    if isinstance(img, str):
-                        result = decrypt_and_display(img)
-                        if result:
-                            decrypted.append(result)
-                    else:
-                        decrypted.append(img)
-                images = decrypted if decrypted else None
-            else:
-                result = decrypt_and_display(images)
-                images = result
+        if just_finished and q_len == 0 and not is_running:
+            prog_update = gr.update(visible=False, value=0)
+            stat_update = gr.update(visible=False, value="")
+        else:
+            prog_update = prog
+            stat_update = stat
+
+        if q_len > 0:
+            queue_display = gr.update(
+                visible=True,
+                value=f"⏳ Jobs in queue: {q_len}"
+            )
+        else:
+            queue_display = gr.update(visible=False, value="")
+
+        if imgs is None:
+            imgs = gr.update(value=None)
+        else:
+            imgs = _decrypt_images_for_display(imgs)
 
         return (
-            state["command"],
-            prog,
-            stat,
-            state["stats"],
-            images,
-            gr.skip(),
+            cmd,
+            prog_update,
+            stat_update,
+            stats,
+            imgs,
+            timer_update,
             queue_display
         )
 
@@ -106,6 +151,10 @@ def bind_generation_pipeline(
             outputs_map['progress_slider'],
             outputs_map['progress_textbox'],
         ]
+    ).then(
+        fn=lambda: gr.update(active=True),
+        inputs=[],
+        outputs=[outputs_map['timer']]
     )
 
     outputs_map['timer'].tick(

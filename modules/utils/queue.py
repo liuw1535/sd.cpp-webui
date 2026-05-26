@@ -5,6 +5,7 @@ import threading
 
 
 _job_queue = queue.Queue()
+_state_lock = threading.Lock()
 
 
 def get_clean_state():
@@ -15,7 +16,8 @@ def get_clean_state():
         "stats": "",
         "images": None,
         "is_running": False,
-        "is_finished": False
+        "is_finished": False,
+        "owner": None
     }
 
 
@@ -32,9 +34,12 @@ def _background_worker():
 
         func = job['func']
         params = job['params']
+        owner = job.get('owner')
 
-        current_job_state.update(get_clean_state())
-        current_job_state["is_running"] = True
+        with _state_lock:
+            current_job_state.update(get_clean_state())
+            current_job_state["is_running"] = True
+            current_job_state["owner"] = owner
 
         try:
             for result in func(params):
@@ -54,12 +59,14 @@ def _background_worker():
                     )
 
         except Exception as e:
-            current_job_state["status"] = f"Error: {str(e)}"
+            with _state_lock:
+                current_job_state["status"] = f"Error: {str(e)}"
             print(f"Worker Error: {e}")
 
         finally:
-            current_job_state["is_running"] = False
-            current_job_state["is_finished"] = True
+            with _state_lock:
+                current_job_state["is_running"] = False
+                current_job_state["is_finished"] = True
             _job_queue.task_done()
 
 
@@ -68,7 +75,7 @@ def start_worker():
     threading.Thread(target=_background_worker, daemon=True).start()
 
 
-def add_job(func, params):
+def add_job(func, params, owner=None):
     """
     Adds a generic job to the queue.
     :param func: The python function to run (e.g., txt2img)
@@ -76,7 +83,8 @@ def add_job(func, params):
     """
     job = {
         'func': func,
-        'params': params
+        'params': params,
+        'owner': owner
     }
     _job_queue.put(job)
 
@@ -86,4 +94,14 @@ def get_queue_size():
 
 
 def get_status():
-    return current_job_state
+    with _state_lock:
+        return current_job_state.copy()
+
+
+def consume_finished():
+    with _state_lock:
+        if current_job_state["is_finished"]:
+            current_job_state["is_finished"] = False
+            return True
+        else:
+            return False

@@ -6,8 +6,7 @@ from typing import Any, Dict
 
 
 CURRENT_DIR = os.getcwd()
-DEFAULT_CONFIG_PATH = 'config.json'
-DEFAULT_PROMPTS_PATH = 'prompts.json'
+DEFAULT_CONFIG_PATH = os.path.join('user_data', 'config.json')
 DEFAULT_SETTINGS = {
     'def_theme': "default",
     'ckpt_dir': os.path.join(CURRENT_DIR, "models/checkpoints/"),
@@ -59,11 +58,12 @@ DEFAULT_SETTINGS = {
     'def_vae_tile_size': 32,
     'def_vae_relative_bool': False,
     'def_vae_relative_tile_size': 0,
+    'def_temporal_tiling': False,
     'def_cache_bool': False,
     'def_cache_mode': "easycache",
-    'def_cache_dit_preset': "none",
     'def_scm_policy': "none",
     'def_threads': 0,
+    'def_max_vram': 0,
     'def_offload_to_cpu': False,
     'def_vae_cpu': False,
     'def_clip_cpu': False,
@@ -96,6 +96,7 @@ class ConfigManager:
         'def_vae': 'vae_dir',
         'def_ckpt_vae': 'vae_dir',
         'def_unet_vae': 'vae_dir',
+        'def_audio_vae': 'vae_dir',
         'def_taesd': 'taesd_dir',
         'def_phtmkr': 'phtmkr_dir',
         'def_cnnet': 'cnnet_dir',
@@ -103,10 +104,12 @@ class ConfigManager:
         'def_clip_l': 'txt_enc_dir',
         'def_clip_g': 'txt_enc_dir',
         'def_clip_vision_h': 'txt_enc_dir',
+        'def_umt5_xxl': 'txt_enc_dir',
+        'def_emb_connect': 'txt_enc_dir',
         'def_llm': 'txt_enc_dir',
     }
 
-    def __init__(self, config_path: str = None, prompts_path: str = None):
+    def __init__(self, config_path: str = None):
         self.config_path = os.getenv(
             'SD_WEBUI_CONFIG_PATH', config_path or DEFAULT_CONFIG_PATH
         )

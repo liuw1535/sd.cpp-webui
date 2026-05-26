@@ -44,6 +44,7 @@ def create_model_widget(
                 scale=kwargs.pop('scale', 7),
                 value=current_value,
                 interactive=True,
+                allow_custom_value=True,
                 **kwargs
             )
 
@@ -174,20 +175,27 @@ def create_img_model_sel_ui():
     diffusion_mode = gr.Number(value=0, visible=False)
     model_inputs = {'in_diffusion_mode': diffusion_mode}
 
-    with gr.Tabs():
-        with gr.Tab("Checkpoint") as ckpt_tab:
+    with gr.Tabs() as model_tabs:
+        with gr.Tab("Checkpoint", id="checkpoint") as ckpt_tab:
             ckpt_inputs = create_ckpt_model_sel_ui()
             model_inputs.update(ckpt_inputs)
 
-        with gr.Tab("UNET") as unet_tab:
+        with gr.Tab("UNET", id="unet") as unet_tab:
             unet_inputs = create_unet_model_sel_ui()
             model_inputs.update(unet_inputs)
+
+    diffusion_mode.change(
+        fn=lambda mode: gr.update(selected="checkpoint" if mode == 0 else "unet"),
+        inputs=[diffusion_mode],
+        outputs=[model_tabs]
+    )
 
     return {
         'inputs': model_inputs,
         'components': {
             'ckpt_tab': ckpt_tab,
             'unet_tab': unet_tab,
+            'model_tabs': model_tabs,
         }
     }
 
@@ -248,7 +256,7 @@ def create_imgedit_model_sel_ui():
 def create_video_model_sel_ui():
     """Create the video model selection UI"""
     with gr.Row():
-        gr.Markdown("Supports: Wan2.1, Wan2.2")
+        gr.Markdown("Supports: LTX-2.3, Wan2.1, Wan2.2")
     with gr.Row():
         with gr.Column():
             unet_model = create_model_widget(
@@ -261,6 +269,12 @@ def create_video_model_sel_ui():
                 label="UNET VAE",
                 dir_key='vae_dir',
                 option_key='def_unet_vae',
+            )
+        with gr.Column():
+            audio_vae = create_model_widget(
+                label="Audio VAE",
+                dir_key='vae_dir',
+                option_key='def_audio_vae',
             )
     with gr.Row():
         with gr.Column():
@@ -276,6 +290,20 @@ def create_video_model_sel_ui():
                 option_key='def_umt5_xxl',
             )
     with gr.Row():
+        with gr.Column():
+            llm = create_model_widget(
+                label="llm",
+                dir_key='txt_enc_dir',
+                option_key='def_llm',
+
+            )
+        with gr.Column():
+            emb_connect = create_model_widget(
+                label="Embedding Connectors",
+                dir_key='txt_enc_dir',
+                option_key='def_emb_connect',
+            )
+    with gr.Row():
         with gr.Accordion(
             label="High Noise", open=False
         ):
@@ -288,7 +316,10 @@ def create_video_model_sel_ui():
     return {
         'in_unet_model': unet_model,
         'in_unet_vae': unet_vae,
+        'in_audio_vae': audio_vae,
         'in_clip_vision_h': clip_vision_h,
         'in_umt5_xxl': umt5_xxl,
+        'in_llm': llm,
+        'in_emb_connect': emb_connect,
         'in_high_noise_model': high_noise_model
     }

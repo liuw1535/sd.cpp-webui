@@ -7,7 +7,7 @@ import gradio as gr
 from modules.shared_instance import config
 from modules.utils.ui_events import update_interactivity
 from .constants import (
-    CACHE_MODE, CACHE_DIT_PRESET, SCM_POLICY
+    CACHE_MODE, SCM_POLICY
 )
 
 
@@ -25,14 +25,7 @@ def create_cache_ui():
             label="Cache mode",
             choices=CACHE_MODE,
             value=config.get('def_cache_mode'),
-            interactive=False
-        )
-
-        cache_dit_preset = gr.Dropdown(
-            label="cache-dit preset",
-            choices=CACHE_DIT_PRESET,
-            value=config.get('def_cache_dit_preset'),
-            interactive=False
+            interactive=config.get('def_cache_bool')
         )
 
         with gr.Accordion(
@@ -68,7 +61,7 @@ def create_cache_ui():
             )
 
     cache_comp = [
-        cache_mode, cache_dit_preset, cache_option,
+        cache_mode, cache_option,
         scm_mask, scm_policy
     ]
 
@@ -81,7 +74,6 @@ def create_cache_ui():
     return {
         'in_cache_bool': cache_bool,
         'in_cache_mode': cache_mode,
-        'in_cache_dit_preset': cache_dit_preset,
         'in_cache_option': cache_option,
         'in_scm_mask': scm_mask,
         'in_scm_policy': scm_policy

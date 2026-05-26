@@ -1,19 +1,21 @@
-# sd.cpp-webui
+# sd.cpp-webui - A Lightweight Gradio WebUI for stable-diffusion.cpp
 
-A simple Gradio-based interface for [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
+**sd.cpp-webui** is a simple, lightweight [Gradio](https://github.com/gradio-app/gradio)-based web interface for [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp).
 
-This program acts primarily as a command generator for **stable-diffusion.cpp**, with some extra features.
+Designed to run local AI text-to-image and video generation models without heavy dependencies, this program acts primarily as a command generator for **stable-diffusion.cpp**, with some extra features for image management.
 
 ## Features
 
-- Minimal python dependencies (Gradio is the main one, no PyTorch required)
-- Supports most **stable-diffusion.cpp** features (the missing ones are work in progress)
-- Live preview using **stable-diffusion.cpp**'s preview option
-- Built-in image gallery
-- Metadata reader
-- Protected login with credentials
+- **Lightweight:** Minimal Python dependencies (Gradio is the main requirement, no PyTorch required).
+- **Feature support:** Supports most **stable-diffusion.cpp** features (missing features are work in progress).
+- **Generation preview:** Live image preview using **stable-diffusion.cpp**'s native preview option.
+- **Image management:** Built-in image gallery.
+- **Metadata reader:** Built-in metadata reader to extract generation data from images.
+- **Secure access:** Optional protected login with user credentials.
 
 ## **stable-diffusion.cpp**'s supported models
+
+This WebUI, by using **stable-diffusion.cpp** as its core, supports a large number of image/video generation models, including:
 
 - SD1.x, SD2.x, SD-Turbo, SDXL, SDXL-Turbo, NitroFusion
 - SD3, SD3.5, FLUX.1-Krea-dev, FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, Chroma, Qwen Image, Z-Image-Turbo
@@ -45,14 +47,14 @@ This program acts primarily as a command generator for **stable-diffusion.cpp**,
       git clone https://github.com/daniandtheweb/sd.cpp-webui.git
       ```
 
-  2. Obtain the `stable-diffusion.cpp` binary (sd for Linux/MacOS or sd.exe for Windows) by compiling or downloading it from the releases and place it in the main `sd.cpp-webui` folder.
+  2. Obtain the `stable-diffusion.cpp` binary (sd-cli for Linux/MacOS or sd-cli.exe for Windows) by compiling or downloading it from the releases and place it in the main `sd.cpp-webui` folder.
 
   3. Run `sdcpp_webui.sh` if you're on Linux/MacOS or `sdcpp_webui_windows.ps1` if you're on Windows.
 
   4. Access the WebUI with the browser at `http://localhost:7860/`.
 
 
-<img width="2617" height="1828" alt="sdcpp_webui_screenshot" src="https://github.com/user-attachments/assets/1119195a-6c7c-483d-b475-d0ef6ae96fb0" />
+<img width="2860" height="1954" alt="Screenshot of sd.cpp-webui, a lightweight Gradio interface for local AI image generation using stable-diffusion.cpp" src="https://github.com/user-attachments/assets/9e6cc19f-55f4-4f76-8202-fa41bbbc4975" />
 
 
 ## Contributors

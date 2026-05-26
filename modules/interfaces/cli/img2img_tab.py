@@ -5,23 +5,30 @@ from functools import partial
 import gradio as gr
 
 from modules.core.cli.sdcpp_cli import img2img
+from modules.utils.image_utils import size_updater
 from modules.utils.ui_events import (
     get_ordered_inputs, bind_generation_pipeline,
-    apply_lora, unet_tab_switch, ckpt_tab_switch,
+    unet_tab_switch, ckpt_tab_switch,
     update_interactivity, refresh_all_options
 )
 from modules.shared_instance import (
     config, subprocess_manager
 )
 from modules.ui.models import create_img_model_sel_ui
-from modules.ui.loras import create_lora_sel_ui
+from modules.ui.loras import (
+    create_lora_sel_ui, bind_lora_events
+)
 from modules.ui.prompts import create_prompts_ui
+from modules.ui.presets import (
+    create_presets_ui, bind_presets_events
+)
 from modules.ui.generation_settings import (
     create_quant_ui, create_generation_settings_ui,
     create_bottom_generation_settings_ui
 )
 from modules.ui.upscale import create_upscl_ui
 from modules.ui.controlnet import create_cnnet_ui
+from modules.ui.slg import create_slg_ui
 from modules.ui.chroma import create_chroma_ui
 from modules.ui.qwen import create_qwen_ui
 from modules.ui.circular import create_circular_ui
@@ -71,6 +78,8 @@ with gr.Blocks()as img2img_block:
     with gr.Row():
         with gr.Column(scale=1):
 
+            presets_ui = create_presets_ui()
+
             with gr.Tab("Generation Settings"):
 
                 generation_settings_ui = create_generation_settings_ui()
@@ -115,6 +124,10 @@ with gr.Blocks()as img2img_block:
                 # ControlNet
                 cnnet_ui = create_cnnet_ui()
                 inputs_map.update(cnnet_ui)
+
+                # Skip Layer Guidance
+                slg_ui = create_slg_ui()
+                inputs_map.update(slg_ui)
 
                 # Chroma
                 chroma_ui = create_chroma_ui()
@@ -185,6 +198,14 @@ with gr.Blocks()as img2img_block:
                     sources="upload", type="filepath"
                 )
                 inputs_map['in_img_inp'] = img_inp_img2img
+            with gr.Row():
+                with gr.Accordion(label="Mask", open=False):
+                    img_mask = gr.ImageEditor(
+                        sources="upload",
+                        type="filepath",
+                        layers=False
+                    )
+                inputs_map['in_img_mask'] = img_mask
             with gr.Group():
                 with gr.Row():
                     gen_btn = gr.Button(
@@ -242,7 +263,16 @@ with gr.Blocks()as img2img_block:
 
     ordered_keys, ordered_components = get_ordered_inputs(inputs_map)
 
-    timer = gr.Timer(value=0.1, active=True)
+    bind_lora_events(lora_ui, prompts_ui)
+
+    is_loading_preset = gr.State(value=False)
+
+    bind_presets_events(
+        presets_ui, generation_settings_ui, model_ui['inputs'],
+        preset_flag=is_loading_preset
+    )
+
+    timer = gr.Timer(value=0.1, active=False)
 
     ui_outputs = {
         'gen_btn': gen_btn,
@@ -265,41 +295,41 @@ with gr.Blocks()as img2img_block:
         outputs=[]
     )
 
-    lora_ui['in_apply_lora_btn'].click(
-        apply_lora,
-        inputs=[
-            lora_ui['in_lora_model'], lora_ui['in_lora_strength'],
-            lora_ui['in_lora_prompt_switch'],
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ],
+    # Interactive Bindings
+    def safe_ckpt_tab_switch(is_loading):
+        if is_loading:
+            return [gr.skip()] * 13 + [False]
+        return list(ckpt_tab_switch()) + [False]
+
+    def safe_unet_tab_switch(is_loading):
+        if is_loading:
+            return [gr.skip()] * 13 + [False]
+        return list(unet_tab_switch()) + [False]
+
+    model_ui['components']['ckpt_tab'].select(
+        safe_ckpt_tab_switch,
+        inputs=[is_loading_preset],
         outputs=[
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
+            model_ui['inputs']['in_diffusion_mode'],
+            model_ui['inputs']['in_ckpt_model'],
+            model_ui['inputs']['in_unet_model'],
+            model_ui['inputs']['in_ckpt_vae'],
+            model_ui['inputs']['in_unet_vae'],
+            model_ui['inputs']['in_clip_g'],
+            model_ui['inputs']['in_clip_l'],
+            model_ui['inputs']['in_t5xxl'],
+            model_ui['inputs']['in_llm'],
+            generation_settings_ui['in_guidance_bool'],
+            generation_settings_ui['in_guidance'],
+            generation_settings_ui['in_flow_shift_bool'],
+            generation_settings_ui['in_flow_shift'],
+            is_loading_preset
         ]
     )
 
-    # Interactive Bindings
-    model_ui['components']['ckpt_tab'].select(
-        ckpt_tab_switch,
-        inputs=[],
-        outputs=[
-            model_ui['inputs']['in_diffusion_mode'],
-            model_ui['inputs']['in_ckpt_model'],
-            model_ui['inputs']['in_unet_model'],
-            model_ui['inputs']['in_ckpt_vae'],
-            model_ui['inputs']['in_unet_vae'],
-            model_ui['inputs']['in_clip_g'],
-            model_ui['inputs']['in_clip_l'],
-            model_ui['inputs']['in_t5xxl'],
-            model_ui['inputs']['in_llm'],
-            generation_settings_ui['in_guidance_bool'],
-            generation_settings_ui['in_guidance'],
-            generation_settings_ui['in_flow_shift_bool'],
-            generation_settings_ui['in_flow_shift']
-        ]
-    )
     model_ui['components']['unet_tab'].select(
-        unet_tab_switch,
-        inputs=[],
+        safe_unet_tab_switch,
+        inputs=[is_loading_preset],
         outputs=[
             model_ui['inputs']['in_diffusion_mode'],
             model_ui['inputs']['in_ckpt_model'],
@@ -313,9 +343,11 @@ with gr.Blocks()as img2img_block:
             generation_settings_ui['in_guidance_bool'],
             generation_settings_ui['in_guidance'],
             generation_settings_ui['in_flow_shift_bool'],
-            generation_settings_ui['in_flow_shift']
+            generation_settings_ui['in_flow_shift'],
+            is_loading_preset
         ]
     )
+
     refresh_opt.click(
         refresh_all_options,
         inputs=[],
@@ -330,6 +362,15 @@ with gr.Blocks()as img2img_block:
         partial(update_interactivity, len(cfg_comp)),
         inputs=img_cfg_bool,
         outputs=cfg_comp
+    )
+
+    img_inp_img2img.change(
+        size_updater,
+        inputs=img_inp_img2img,
+        outputs=[
+            generation_settings_ui['in_width'],
+            generation_settings_ui['in_height']
+        ]
     )
 
     img2img_params['pprompt'] = prompts_ui['in_pprompt']

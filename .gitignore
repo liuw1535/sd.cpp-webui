@@ -1,4 +1,5 @@
 __pycache__/
+user_data/
 *.ckpt
 *.safetensors
 *.pth
@@ -6,6 +7,11 @@ __pycache__/
 *.gguf
 *.png
 *.jpg
+*.jpeg
+*.webp
+*.webm
+*.avi
+*.mp4
 *.json
 *.part
 sd*

@@ -7,20 +7,29 @@ import gradio as gr
 from modules.core.cli.sdcpp_cli import any2video
 from modules.utils.ui_events import (
     get_ordered_inputs, bind_generation_pipeline,
-    apply_lora, update_interactivity, refresh_all_options
+    update_interactivity, refresh_all_options
 )
 from modules.shared_instance import (
     config, subprocess_manager
 )
 from modules.ui.models import create_video_model_sel_ui
-from modules.ui.loras import create_lora_sel_ui
+from modules.ui.loras import (
+    create_lora_sel_ui, bind_lora_events
+)
 from modules.ui.prompts import create_prompts_ui
+from modules.ui.presets import (
+    create_presets_ui, bind_presets_events
+)
 from modules.ui.generation_settings import (
     create_quant_ui, create_generation_settings_ui,
     create_bottom_generation_settings_ui
 )
+from modules.ui.high_noise_generation_settings import (
+    create_high_noise_generation_settings_ui
+)
 from modules.ui.upscale import create_upscl_ui
 from modules.ui.controlnet import create_cnnet_ui
+from modules.ui.slg import create_slg_ui
 from modules.ui.eta import create_eta_ui
 from modules.ui.taesd import create_taesd_ui
 from modules.ui.vae_tiling import create_vae_tiling_ui
@@ -70,6 +79,8 @@ with gr.Blocks() as any2video_block:
     with gr.Row():
         with gr.Column(scale=1):
 
+            presets_ui = create_presets_ui()
+
             with gr.Tab("Generation Settings"):
 
                 generation_settings_ui = create_generation_settings_ui()
@@ -114,8 +125,42 @@ with gr.Blocks() as any2video_block:
 
                 flow_shift_comp = [flow_shift]
 
+                with gr.Accordion(
+                    label="Wan & MoE Specifics", open=False
+                ):
+                    with gr.Row():
+                        moe_boundary_bool = gr.Checkbox(
+                            label="Enable MoE Boundary",
+                            value=False
+                        )
+                        moe_boundary = gr.Number(
+                            label="MoE Boundary",
+                            value=0.875,
+                            step=0.001,
+                            interactive=False
+                        )
+                    with gr.Row():
+                        vace_strength_bool = gr.Checkbox(
+                            label="Enable VACE Strength",
+                            value=False
+                        )
+                        vace_strength = gr.Number(
+                            label="VACE Strength",
+                            value=1.0,
+                            step=0.1,
+                            interactive=False
+                        )
+                inputs_map['in_moe_boundary_bool'] = moe_boundary_bool
+                inputs_map['in_moe_boundary'] = moe_boundary
+                inputs_map['in_vace_strength_bool'] = vace_strength_bool
+                inputs_map['in_vace_strength'] = vace_strength
+
                 bottom_generation_settings_ui = create_bottom_generation_settings_ui()
                 inputs_map.update(bottom_generation_settings_ui)
+
+            with gr.Tab("High Noise Settings"):
+                high_noise_generation_settings_ui = create_high_noise_generation_settings_ui()
+                inputs_map.update(high_noise_generation_settings_ui)
 
             with gr.Tab("Image Enhancement"):
 
@@ -126,6 +171,10 @@ with gr.Blocks() as any2video_block:
                 # ControlNet
                 cnnet_ui = create_cnnet_ui()
                 inputs_map.update(cnnet_ui)
+
+                # Skip Layer Guidance
+                slg_ui = create_slg_ui()
+                inputs_map.update(slg_ui)
 
                 # ETA
                 eta_ui = create_eta_ui()
@@ -194,6 +243,15 @@ with gr.Blocks() as any2video_block:
                             sources="upload", type="filepath"
                         )
                         inputs_map['in_last_frame_inp'] = last_frame_inp
+            with gr.Row():
+                with gr.Accordion(
+                    label="Video to Video (VACE)", open=False
+                ):
+                    control_video_dir = gr.Textbox(
+                        label="Control Video Frames Directory",
+                        placeholder="Path to folder containing extracted frames (e.g., ./post+depth)"
+                    )
+                    inputs_map['in_control_video_dir'] = control_video_dir
             with gr.Group():
                 with gr.Row():
                     gen_btn = gr.Button(
@@ -251,7 +309,16 @@ with gr.Blocks() as any2video_block:
 
     ordered_keys, ordered_components = get_ordered_inputs(inputs_map)
 
-    timer = gr.Timer(value=0.1, active=True)
+    bind_lora_events(lora_ui, prompts_ui)
+
+    is_loading_preset = gr.State(value=False)
+
+    bind_presets_events(
+        presets_ui, generation_settings_ui, model_ui,
+        preset_flag=is_loading_preset
+    )
+
+    timer = gr.Timer(value=0.1, active=False)
 
     ui_outputs = {
         'gen_btn': gen_btn,
@@ -274,18 +341,6 @@ with gr.Blocks() as any2video_block:
         outputs=[]
     )
 
-    lora_ui['in_apply_lora_btn'].click(
-        apply_lora,
-        inputs=[
-            lora_ui['in_lora_model'], lora_ui['in_lora_strength'],
-            lora_ui['in_lora_prompt_switch'],
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ],
-        outputs=[
-            prompts_ui['in_pprompt'], prompts_ui['in_nprompt']
-        ]
-    )
-
     # Interactive Bindings
     refresh_opt.click(
         refresh_all_options,
@@ -301,6 +356,18 @@ with gr.Blocks() as any2video_block:
         partial(update_interactivity, len(flow_shift_comp)),
         inputs=flow_shift_bool,
         outputs=flow_shift_comp
+    )
+
+    moe_boundary_bool.change(
+        partial(update_interactivity, moe_boundary),
+        inputs=moe_boundary_bool,
+        outputs=moe_boundary
+    )
+
+    vace_strength_bool.change(
+        partial(update_interactivity, vace_strength),
+        inputs=vace_strength_bool,
+        outputs=vace_strength
     )
 
     any2video_params['pprompt'] = prompts_ui['in_pprompt']

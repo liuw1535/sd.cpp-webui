@@ -5,12 +5,13 @@ import io
 import re
 import json
 import base64
-import requests
+import httpx
 from PIL import Image
 from typing import Dict, Any, Generator
 
 import gradio as gr
 
+from modules.core.common.sd_common import process_editor_mask
 from modules.utils.file_utils import get_path
 from modules.loader import get_loras
 from modules.utils.sdcpp_utils import generate_output_filename
@@ -44,8 +45,17 @@ class ApiTaskRunner:
         output_scheme = config.get('def_output_scheme')
 
         if filename_override and str(filename_override).strip():
-            filename = f"{filename_override}.{extension}"
-            self.output_path = os.path.join(output_dir, filename)
+            base_name = str(filename_override).strip()
+            filename = f"{base_name}.{extension}"
+            test_path = os.path.join(output_dir, filename)
+
+            counter = 1
+            while os.path.exists(test_path):
+                filename = f"{base_name}_{counter}.{extension}"
+                test_path = os.path.join(output_dir, filename)
+                counter += 1
+
+            self.output_path = test_path
             return
 
         name_parts = []
@@ -257,11 +267,11 @@ class ApiTaskRunner:
         try:
             if isinstance(payload_or_files, tuple):
                 data, files = payload_or_files
-                response = requests.post(
+                response = httpx.post(
                     self.url, data=data, files=files, timeout=None
                 )
             else:
-                response = requests.post(
+                response = httpx.post(
                     self.url, json=payload_or_files, timeout=None
                 )
 
@@ -331,15 +341,14 @@ class Img2ImgApiRunner(ApiTaskRunner):
             init_img.save(buf, format="PNG")
             payload["init_images"] = [base64.b64encode(buf.getvalue()).decode('utf-8')]
 
-        mask_img = self._get_param('in_mask_img')
+        mask_input = self._get_param('in_img_mask') or self._get_param('in_mask_img')
+        mask_img = process_editor_mask(mask_input)
+
         if mask_img is not None:
-            if not isinstance(mask_img, Image.Image):
-                mask_img = Image.fromarray(mask_img)
             m_buf = io.BytesIO()
             mask_img.save(m_buf, format="PNG")
             payload["mask"] = base64.b64encode(m_buf.getvalue()).decode('utf-8')
             payload["inpainting_mask_invert"] = self._get_param('in_invert_mask', False)
-
         return payload
 
 
@@ -364,25 +373,36 @@ class ImgEditApiRunner(ApiTaskRunner):
 
         # Files
         files = []
-        init_img = self._get_param('in_ref_img') or self._get_param('in_img_inp')
-        if init_img is not None:
-            if isinstance(init_img, str):
-                init_img = Image.open(init_img)
-            elif not isinstance(init_img, Image.Image):
-                init_img = Image.fromarray(init_img)
+        init_imgs = self._get_param('in_ref_img') or self._get_param('in_img_inp')
+        if init_imgs is not None:
+            if not isinstance(init_imgs, list):
+                init_imgs = [init_imgs]
 
-            buf = io.BytesIO()
-            init_img.save(buf, format="PNG")
-            buf.seek(0)
-            files.append(("image[]", ("image.png", buf, "image/png")))
+            for idx, img_item in enumerate(init_imgs):
+                if isinstance(img_item, tuple):
+                    img_val = img_item[0]
+                elif isinstance(img_item, dict) and "name" in img_item:
+                    img_val = img_item["name"]
+                else:
+                    img_val = img_item
 
-        mask_img = self._get_param('in_mask_img')
+                if isinstance(img_val, str):
+                    img_obj = Image.open(img_val)
+                elif isinstance(img_val, Image.Image):
+                    img_obj = img_val
+                else:
+                    img_obj = Image.fromarray(img_val)
+
+                buf = io.BytesIO()
+                img_obj.save(buf, format="PNG")
+                buf.seek(0)
+
+                files.append(("image[]", (f"image_{idx}.png", buf, "image/png")))
+
+        mask_input = self._get_param('in_img_mask') or self._get_param('in_mask_img')
+        mask_img = process_editor_mask(mask_input)
+
         if mask_img is not None:
-            if isinstance(mask_img, str):
-                mask_img = Image.open(mask_img)
-            elif not isinstance(mask_img, Image.Image):
-                mask_img = Image.fromarray(mask_img)
-
             m_buf = io.BytesIO()
             mask_img.save(m_buf, format="PNG")
             m_buf.seek(0)

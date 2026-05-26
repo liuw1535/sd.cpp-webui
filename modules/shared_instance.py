@@ -2,6 +2,7 @@
 
 import sys
 
+from modules.utils.file_utils import migrate_legacy_configs
 from modules.config import ConfigManager
 from modules.utils.sd_interface import (
     SDOptionsCache, exe_name
@@ -10,6 +11,7 @@ from modules.utils.subprocess_manager import SubprocessManager
 import modules.utils.queue as queue_manager
 from modules.utils.ui_state import ModelState
 from modules.utils.prompt_manager import PromptManager
+from modules.utils.preset_manager import PresetManager
 
 
 SD_CLI = exe_name("cli")
@@ -27,6 +29,8 @@ class ServerState:
         self.seed = ""
 
 
+migrate_legacy_configs()
+
 config = ConfigManager()
 
 current_mode = "server" if "--server" in sys.argv else "cli"
@@ -42,3 +46,5 @@ server_state = ServerState()
 model_state = ModelState()
 
 prompt_manager = PromptManager()
+
+preset_manager = PresetManager()

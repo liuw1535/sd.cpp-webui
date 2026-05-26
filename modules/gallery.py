@@ -1,17 +1,22 @@
 """sd.cpp-webui - Gallery module"""
 
 import os
+import shutil
+import subprocess
 from typing import List, Tuple, Any, Optional
-from PIL import Image
 
 import gradio as gr
 
 from modules.shared_instance import config
 from modules.utils.image_utils import size_extractor
+from modules.utils.video_utils import get_avi_resolution
 from modules.utils.metadata_utils import (
     parse_png_metadata, parse_jpg_metadata,
     extract_params_from_text
 )
+
+
+PAGE_SIZE = 16
 
 
 class GalleryManager:
@@ -29,11 +34,11 @@ class GalleryManager:
         self.page_num: int = 1
         self.ctrl: int = 0
 
-        self.sort_order: str = config.get('def_gallery_sorting')
+        self.sort_order: str = config.get('def_gallery_sorting', 'Date (Oldest First)')
 
-        self.selected_img_index_on_page: Optional[int] = None
-        self.selected_img_global_index: Optional[int] = None
-        self.current_img_path: Optional[str] = None
+        self.selected_media_index_on_page: Optional[int] = None
+        self.selected_media_global_index: Optional[int] = None
+        self.current_media_path: Optional[str] = None
 
     def _get_current_dir(self) -> str:
         """Determines the directory based on the control value."""
@@ -46,12 +51,12 @@ class GalleryManager:
         Gets all image files from the current directory,
         sorted by creation time.
         """
-        img_dir = self._get_current_dir()
+        media_dir = self._get_current_dir()
         try:
             files = (
-                os.path.join(img_dir, f)
-                for f in os.listdir(img_dir)
-                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.avi'))
+                os.path.join(media_dir, f)
+                for f in os.listdir(media_dir)
+                if f.lower().endswith(('.png', '.jpg', '.jpeg', '.avi', '.webm', '.webp', '.mp4'))
             )
             if self.sort_order == "Date (Newest First)":
                 return sorted(files, key=os.path.getctime, reverse=True)
@@ -68,8 +73,8 @@ class GalleryManager:
 
     def reload_gallery(
         self, page_num: int = 1, ctrl_inp: Optional[int] = None,
-        sort_inp: Optional[str] = None
-    ) -> Tuple[List[Image.Image], int, gr.Gallery]:
+        sort_inp: Optional[str] = None, selected_index: Optional[int] = None
+    ) -> Tuple[gr.update, int]:
         """Reloads the gallery block to a specific page."""
 
         if sort_inp is not None:
@@ -79,8 +84,8 @@ class GalleryManager:
             self.ctrl = int(ctrl_inp)
 
         files = self._get_sorted_files()
-        total_imgs = len(files)
-        total_pages = (total_imgs + 15) // 16 or 1
+        total_items = len(files)
+        total_pages = (total_items + 15) // PAGE_SIZE or 1
 
         try:
             page_num = int(page_num)
@@ -94,23 +99,26 @@ class GalleryManager:
 
         self.page_num = int(page_num)
 
-        start_index = (self.page_num - 1) * 16
-        end_index = start_index + 16
+        start_index = (self.page_num - 1) * PAGE_SIZE
+        end_index = start_index + PAGE_SIZE
 
         page_files = files[start_index:end_index]
 
-        # 解密图片
         from modules.utils.image_display import decrypt_and_display
-        imgs = []
+
+        gallery_items = []
+        image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
         for path in page_files:
+            if not path.lower().endswith(image_extensions):
+                gallery_items.append(path)
+                continue
+
             try:
                 img = decrypt_and_display(path)
-                if img is None:
-                    img = Image.open(path)
-                imgs.append(img)
+                gallery_items.append(img if img is not None else path)
             except Exception as e:
                 print(f"Failed to load image {path}: {e}")
-                imgs.append(Image.open(path))
+                gallery_items.append(path)
 
         dir_map = {
             0: 'txt2img',
@@ -122,21 +130,26 @@ class GalleryManager:
         current_label = f"{dir_map.get(self.ctrl, 'Gallery')} - {self.sort_order}"
 
         # Reset selections when reloading
-        self.selected_img_index_on_page = None
-        self.current_img_path = None
+        if selected_index is None:
+            self.selected_media_index_on_page = None
+            self.current_media_path = None
 
         return (
-            imgs, self.page_num, gr.Gallery(selected_index=None),
-            gr.update(label=current_label)
+            gr.Gallery(
+                value=gallery_items,
+                label=current_label,
+                selected_index=selected_index
+            ),
+            self.page_num
         )
 
     def _navigate_page(
         self, direction: int
-    ) -> Tuple[List[Image.Image], int, gr.Gallery]:
+    ) -> Tuple[gr.update, int]:
         """Helper for next/prev/last page navigation."""
         files = self._get_sorted_files()
-        total_imgs = len(files)
-        total_pages = (total_imgs + 15) // 16 or 1
+        total_items = len(files)
+        total_pages = (total_items + 15) // PAGE_SIZE or 1
 
         if direction == 1:  # Next
             self.page_num = (
@@ -167,88 +180,127 @@ class GalleryManager:
         """Moves to the last gallery page."""
         return self._navigate_page(0)
 
-    def get_img_info(self, sel_data: gr.SelectData) -> Tuple[Any, ...]:
-        """Reads and parses generation data from a selected image."""
-        if not sel_data:
+    def get_media_info(self, sel_data: gr.SelectData) -> Tuple[Any, ...]:
+        """Reads and parses generation data from a selected media."""
+        if sel_data is None:
             # Return empty values if no image is selected
-            return ("", "", None, None, None, "", "", None, None, "", "")
+            return (
+                "", "", None, None, None, "", "", None, None, "", "",
+                gr.update(visible=False)
+            )
 
-        self.selected_img_index_on_page = sel_data.index
+        self.selected_media_index_on_page = sel_data.index
         # Calculate the global index across all pages
-        self.selected_img_global_index = (
-            ((self.page_num - 1) * 16) + sel_data.index
+        self.selected_media_global_index = (
+            ((self.page_num - 1) * PAGE_SIZE) + sel_data.index
         )
 
         files = self._get_sorted_files()
 
-        if self.selected_img_global_index >= len(files):
+        if self.selected_media_global_index >= len(files):
             return (
                 "", "Image index out of range.", None, None, None, "", "",
-                None, None, "", ""
+                None, None, "", "", gr.update(visible=False)
             )
 
-        self.current_img_path = files[self.selected_img_global_index]
+        self.current_media_path = files[self.selected_media_global_index]
 
         raw_text = None
-        file_path_lower = self.current_img_path.lower()
+        width = None
+        height = None
+        file_path_lower = self.current_media_path.lower()
 
-        if file_path_lower.endswith('.png'):
-            raw_text = parse_png_metadata(self.current_img_path)
-        elif file_path_lower.endswith(('.jpg', '.jpeg')):
-            raw_text = parse_jpg_metadata(self.current_img_path)
+        try:
+            if file_path_lower.endswith('.png'):
+                raw_text = parse_png_metadata(self.current_media_path)
+                width, height = size_extractor(self.current_media_path)
+            elif file_path_lower.endswith(('.jpg', '.jpeg')):
+                raw_text = parse_jpg_metadata(self.current_media_path)
+                width, height = size_extractor(self.current_media_path)
+            elif file_path_lower.endswith(('.avi', '.mp4')):
+                raw_text = ""
+                width, height = get_avi_resolution(self.current_media_path)
+        except Exception as e:
+            print(f"Failed to read metadata for {self.current_media_path}: {e}")
 
-        params = extract_params_from_text(raw_text)
+        params = extract_params_from_text(raw_text) if raw_text else {}
+        is_avi = self.current_media_path and self.current_media_path.lower().endswith('.avi')
+        ffmpeg_available = shutil.which("ffmpeg") is not None
 
-        width, height = size_extractor(self.current_img_path)
+        btn_update = gr.update(visible=is_avi, interactive=ffmpeg_available)
 
         return (
-            params['pprompt'], params['nprompt'], width, height,
-            params['steps'], params['sampler'], params['scheduler'],
-            params['cfg'], params['seed'], self.current_img_path,
-            raw_text or ""
+            params.get('pprompt', ''), params.get('nprompt', ''),
+            width, height, params.get('steps', None),
+            params.get('sampler', ''), params.get('scheduler', ''),
+            params.get('cfg', None), params.get('seed', None),
+            self.current_media_path, raw_text or "", btn_update
         )
 
-    def delete_img(self) -> Tuple[Any, ...]:
+    def convert_to_mp4(self) -> Tuple[gr.update, int]:
+        """Converts the currently selected .avi file to an .mp4 file."""
+        if not self.current_media_path or not self.current_media_path.lower().endswith('.avi'):
+            return self.reload_gallery(page_num=self.page_num)
+
+        out_path = os.path.splitext(self.current_media_path)[0] + '.mp4'
+
+        if not os.path.exists(out_path):
+            cmd = [
+                'ffmpeg', '-y', '-i', self.current_media_path,
+                '-c:v', 'libx264', '-c:a', 'aac',
+                '-movflags', '+faststart', out_path
+            ]
+            try:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                print(f"\nSuccessfully converted to {out_path}\n")
+            except subprocess.CalledProcessError as e:
+                print(f"\nFFmpeg conversion failed: {e.stderr.decode()}\n")
+
+        # Reload the gallery to surface the new MP4 file
+        return self.reload_gallery(page_num=self.page_num)
+
+    def delete_media(self) -> Tuple[Any, ...]:
         """
-        Deletes the currently selected image. It then selects the previous
-        image, or the next if the first was deleted. If the gallery becomes
+        Deletes the currently selected media. It then selects the previous
+        media, or the next if the first was deleted. If the gallery becomes
         empty, it resets the selection.
         """
         # If no image is selected or the index is unknown, just refresh.
-        if (not self.current_img_path or
-                not os.path.exists(self.current_img_path) or
-                self.selected_img_global_index is None):
-            imgs, page_num, gallery_update, _ = (
-                self.reload_gallery(page_num=self.page_num)
-            )
-            return (
-                imgs, page_num, gallery_update, "", "", None, None, None, "",
-                "", None, None, "", ""
+        if (not self.current_media_path or
+                not os.path.exists(self.current_media_path) or
+                self.selected_media_global_index is None):
+            gallery_update, page_num = self.reload_gallery(
+                page_num=self.page_num
             )
 
-        index_to_delete = self.selected_img_global_index
-        path_to_delete = self.current_img_path
+            return (
+                gallery_update, page_num,
+                "", "", None, None, None, "", "", None, None,
+                "", "", gr.update(visible=False)
+            )
+
+        index_to_delete = self.selected_media_global_index
+        path_to_delete = self.current_media_path
 
         try:
             os.remove(path_to_delete)
-            print(f"Deleted {path_to_delete}")
+            print(f"\nDeleted {path_to_delete}")
         except OSError as e:
-            print(f"Error deleting file: {e}")
+            print(f"\nError deleting file: {e}")
 
         files_after_delete = self._get_sorted_files()
 
         if not files_after_delete:
-            self.current_img_path = None
-            self.selected_img_index_on_page = None
-            self.selected_img_global_index = None
+            self.current_media_path = None
+            self.selected_media_index_on_page = None
+            self.selected_media_global_index = None
 
-            imgs, page_num, gallery_update, _ = (
-                self.reload_gallery(page_num=1)
-            )
+            gallery_update, page_num = self.reload_gallery(page_num=1)
 
             return (
-                imgs, page_num, gallery_update,
-                "", "", None, None, None, "", "", None, None, "", ""
+                gallery_update, page_num,
+                "", "", None, None, None, "", "", None, None,
+                "", "", gr.update(visible=False)
             )
 
         new_global_index = index_to_delete - 1 if index_to_delete > 0 else 0
@@ -256,38 +308,43 @@ class GalleryManager:
         if new_global_index >= len(files_after_delete):
             new_global_index = len(files_after_delete) - 1
 
-        new_page_num = (new_global_index // 16) + 1
-        new_page_index = new_global_index % 16
+        new_page_num = (new_global_index // PAGE_SIZE) + 1
+        new_page_index = new_global_index % PAGE_SIZE
 
-        imgs, page_num, _, _ = self.reload_gallery(page_num=new_page_num)
+        gallery_update, page_num = self.reload_gallery(
+            page_num=new_page_num, selected_index=new_page_index
+        )
 
-        gallery_update = gr.Gallery(selected_index=new_page_index)
-
-        self.selected_img_global_index = new_global_index
-        self.selected_img_index_on_page = new_page_index
-        self.current_img_path = files_after_delete[new_global_index]
+        self.selected_media_global_index = new_global_index
+        self.selected_media_index_on_page = new_page_index
+        self.current_media_path = files_after_delete[new_global_index]
 
         raw_text = None
-        if self.current_img_path.lower().endswith('.png'):
-            raw_text = parse_png_metadata(self.current_img_path)
-        elif self.current_img_path.lower().endswith(('.jpg', '.jpeg')):
-            raw_text = parse_jpg_metadata(self.current_img_path)
+        if self.current_media_path.lower().endswith('.png'):
+            raw_text = parse_png_metadata(self.current_media_path)
+        elif self.current_media_path.lower().endswith(('.jpg', '.jpeg')):
+            raw_text = parse_jpg_metadata(self.current_media_path)
 
-        params = extract_params_from_text(raw_text)
+        params = extract_params_from_text(raw_text) if raw_text else {}
 
-        width, height = size_extractor(self.current_img_path)
+        width, height = size_extractor(self.current_media_path)
+
+        is_avi = self.current_media_path and self.current_media_path.lower().endswith('.avi')
+        ffmpeg_available = shutil.which("ffmpeg") is not None
+        btn_update = gr.update(visible=is_avi, interactive=ffmpeg_available)
 
         return (
-            imgs, page_num, gallery_update,
-            params['pprompt'], params['nprompt'], width, height,
-            params['steps'], params['sampler'], params['scheduler'],
-            params['cfg'], params['seed'], self.current_img_path,
-            raw_text or ""
+            gallery_update, page_num,
+            params.get('pprompt', ''), params.get('nprompt', ''),
+            width, height, params.get('steps', None),
+            params.get('sampler', ''), params.get('scheduler', ''),
+            params.get('cfg', None), params.get('seed', None),
+            self.current_media_path, raw_text or "", btn_update
         )
 
 
-def get_next_img(subctrl: int) -> str:
-    """Creates a new, sequential image name (e.g., '123.png')."""
+def get_next_media(subctrl: int) -> str:
+    """Creates a new, sequential media name (e.g., '123.png')."""
     dir_map = {
         0: 'txt2img_dir',
         1: 'img2img_dir',
@@ -296,16 +353,16 @@ def get_next_img(subctrl: int) -> str:
         4: 'upscale_dir'
     }
     dir_key = dir_map.get(subctrl, 'txt2img_dir')
-    img_out_dir = config.get(dir_key)
+    media_out_dir = config.get(dir_key)
 
-    if not os.path.isdir(img_out_dir):
-        os.makedirs(img_out_dir, exist_ok=True)
+    if not os.path.isdir(media_out_dir):
+        os.makedirs(media_out_dir, exist_ok=True)
 
     try:
         numbers = []
-        for f in os.listdir(img_out_dir):
-            if f.endswith('.png'):
-                name_without_ext = f[:-4]
+        for f in os.listdir(media_out_dir):
+            if f.endswith(('.png', '.jpg', '.jpeg', '.avi')):
+                name_without_ext = os.path.splitext(f)[0]
 
                 base_num_str = name_without_ext.split('_')[0]
 
@@ -316,4 +373,6 @@ def get_next_img(subctrl: int) -> str:
     except (ValueError, FileNotFoundError):
         next_number = 1
 
-    return f"{next_number}.png"
+    extension = ".avi" if subctrl == 3 else ".png"
+
+    return f"{next_number}{extension}"
