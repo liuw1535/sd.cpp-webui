@@ -37,7 +37,8 @@ def decrypt_and_display(image_paths):
             except Exception as e:
                 print(f"Failed to decrypt {path}: {e}, trying direct open")
                 try:
-                    decrypted_images.append(Image.open(path))
+                    with Image.open(path) as img:
+                        decrypted_images.append(img.copy())
                 except Exception as e2:
                     print(f"Failed to open {path}: {e2}")
         else:

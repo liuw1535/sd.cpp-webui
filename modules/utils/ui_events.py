@@ -6,7 +6,7 @@ import gradio as gr
 
 import modules.utils.queue as queue_manager
 from modules.shared_instance import (
-    sd_options, model_state
+    sd_options, model_state, config
 )
 
 
@@ -20,6 +20,7 @@ def _decrypt_images_for_display(images):
     from modules.utils.image_display import decrypt_and_display
 
     image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+    encryption_enabled = config.get('enable_encryption', False)
 
     if isinstance(images, list):
         decrypted = []
@@ -32,18 +33,20 @@ def _decrypt_images_for_display(images):
                 result = decrypt_and_display(img)
                 if result is not None:
                     decrypted.append(result)
-                else:
+                elif not encryption_enabled:
                     decrypted.append(img)
             else:
                 decrypted.append(img)
-        return decrypted
+        return decrypted if decrypted else gr.skip()
 
     if isinstance(images, str):
         if not images.lower().endswith(image_extensions):
             return images
 
         result = decrypt_and_display(images)
-        return result if result is not None else images
+        if result is not None:
+            return result
+        return gr.skip() if encryption_enabled else images
 
     return images
 

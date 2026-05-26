@@ -30,5 +30,7 @@ class ImageEncryption:
         for i in range(len(encrypted_data)):
             decrypted_data[i] = encrypted_data[i] ^ key[i % len(key)]
         
-        # 转换为 PIL Image
-        return Image.open(io.BytesIO(bytes(decrypted_data)))
+        # 转换为 PIL Image，并加载到内存，避免底层 BytesIO 生命周期影响 UI 显示。
+        image = Image.open(io.BytesIO(bytes(decrypted_data)))
+        image.load()
+        return image

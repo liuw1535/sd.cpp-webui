@@ -116,6 +116,37 @@ class CommandRunner(CommonRunner):
                 f"{base}_{i}{ext}" for i in range(batch_count)
             ]
 
+    def _prepare_gallery_update(self, paths, skip_on_failure=False):
+        """Returns image values that Gradio can display."""
+        if not self.enable_encryption:
+            return paths
+
+        from modules.utils.image_display import decrypt_and_display
+
+        is_single = isinstance(paths, str)
+        path_list = [paths] if is_single else paths
+        image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+
+        gallery_items = []
+        for path in path_list:
+            if (
+                not isinstance(path, str) or
+                not path.lower().endswith(image_extensions)
+            ):
+                gallery_items.append(path)
+                continue
+
+            result = decrypt_and_display(path)
+            if result is not None:
+                gallery_items.append(result)
+            elif not skip_on_failure:
+                gallery_items.append(path)
+
+        if not gallery_items:
+            return gr.skip() if skip_on_failure else paths
+
+        return gallery_items[0] if is_single else gallery_items
+
     def build_command(self):
         """
         Main method to build the command.
@@ -129,11 +160,6 @@ class CommandRunner(CommonRunner):
         print(f"\n\n{self.fcommand}\n\n")
 
         process_env = self._build_process_env()
-
-        if self.preview_path:
-            gallery_update = [self.preview_path]
-        else:
-            gallery_update = None
 
         yield (
             self.fcommand,
@@ -158,7 +184,9 @@ class CommandRunner(CommonRunner):
                 )
             else:
                 if self.preview_path and os.path.isfile(self.preview_path):
-                    gallery_update = [self.preview_path]
+                    gallery_update = self._prepare_gallery_update(
+                        [self.preview_path], skip_on_failure=True
+                    )
                 else:
                     gallery_update = gr.skip()
 
@@ -176,7 +204,7 @@ class CommandRunner(CommonRunner):
         valid_outputs = [out for out in self.outputs if os.path.isfile(out)]
 
         if valid_outputs:
-            final_gallery_update = valid_outputs
+            final_gallery_update = self._prepare_gallery_update(valid_outputs)
         else:
             final_gallery_update = gr.skip()
 
