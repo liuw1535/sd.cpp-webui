@@ -37,21 +37,66 @@ def detect_image_media_type(data: bytes) -> Optional[str]:
     return None
 
 
+def _normalize_url_prefix(prefix: str) -> str:
+    """Normalize a path prefix so it can be appended to an origin."""
+    if not prefix or prefix == "/":
+        return ""
+
+    prefix = "/" + prefix.strip("/")
+    return prefix
+
+
+def _request_root_path(request) -> str:
+    """Return the ASGI root path/prefix when Gradio is mounted below / ."""
+    raw_request = getattr(request, "request", None)
+    scope = getattr(raw_request, "scope", {}) or {}
+    return scope.get("root_path", "") or ""
+
+
+def _referer_path_prefix(referer: str) -> str:
+    """Infer the externally visible app prefix from the browser referer."""
+    parsed = urlparse(referer)
+    path = parsed.path or ""
+
+    if not path or path == "/":
+        return ""
+
+    # Gradio is a single-page app.  The Referer normally points at the app
+    # root, including any reverse-proxy prefix (for example /proxy/7860/).
+    # Preserve that prefix so generated media URLs hit this FastAPI app instead
+    # of the proxy/server root, where they often become a 22-byte 404 body.
+    return _normalize_url_prefix(path)
+
+
 def get_request_base_url(request=None) -> str:
-    """Build the browser-visible origin for URLs returned to Gradio."""
+    """Build the browser-visible base URL for links returned to Gradio."""
     if request is None:
         return ""
 
-    headers = getattr(request, "headers", {}) or {}
-    referer = headers.get("referer") or headers.get("origin")
+    headers = dict(getattr(request, "headers", {}) or {})
+    prefix = (
+        headers.get("x-forwarded-prefix")
+        or headers.get("x-script-name")
+        or _request_root_path(request)
+    )
+
+    referer = headers.get("referer")
     if referer:
         parsed = urlparse(referer)
         if parsed.scheme and parsed.netloc:
-            return f"{parsed.scheme}://{parsed.netloc}"
+            if not prefix:
+                prefix = _referer_path_prefix(referer)
+            return f"{parsed.scheme}://{parsed.netloc}{_normalize_url_prefix(prefix)}"
+
+    origin = headers.get("origin")
+    if origin:
+        parsed = urlparse(origin)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}{_normalize_url_prefix(prefix)}"
 
     host = headers.get("x-forwarded-host") or headers.get("host")
     if not host:
-        return ""
+        return _normalize_url_prefix(prefix)
 
     proto = headers.get("x-forwarded-proto")
     if not proto:
@@ -59,7 +104,7 @@ def get_request_base_url(request=None) -> str:
         raw_url = getattr(raw_request, "url", None)
         proto = getattr(raw_url, "scheme", "http")
 
-    return f"{proto}://{host}"
+    return f"{proto}://{host}{_normalize_url_prefix(prefix)}"
 
 
 def _token_for_path(path: str) -> str:
