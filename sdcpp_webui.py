@@ -46,6 +46,7 @@ from modules.interfaces.common.options_tab import (
 )
 from modules.config import ConfigManager
 from modules.ui.constants import FIELDS, SAMPLERS, SCHEDULERS
+from modules.utils.decrypted_image_server import register_decrypted_image_route
 
 
 DARK_MODE_JS = """
@@ -97,14 +98,14 @@ def copy_to_imgedit(width, height, path_info):
     return [gr.Tabs(selected="imgedit"), width, height, gallery_path]
 
 
-def lazy_load_gallery(is_loaded, page, ctrl):
+def lazy_load_gallery(is_loaded, page, ctrl, request: gr.Request = None):
     if is_loaded:
         # If already loaded, return existing values (do nothing)
         return (
             gr.skip(), gr.skip(), True
         )
 
-    results = gallery_manager.reload_gallery(page, ctrl)
+    results = gallery_manager.reload_gallery(page, ctrl, request=request)
 
     return *results, True
 
@@ -328,6 +329,8 @@ def sdcpp_launch(
             tabs, gallery_tab = render_cli_ui()
 
         bind_ui_events(server, tabs, gallery_tab, gallery_loaded_state)
+
+    register_decrypted_image_route(sdcpp)
 
     # Pass the arguments to sdcpp.launch with argument unpacking
     sdcpp.launch(

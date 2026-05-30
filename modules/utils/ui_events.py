@@ -13,24 +13,28 @@ from modules.shared_instance import (
 _polling_configs = []
 
 
-def _decrypt_images_for_display(images):
+def _decrypt_images_for_display(images, request=None):
     if not images:
         return images
 
     from modules.utils.image_display import decrypt_and_display
 
     image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
+    http_prefixes = ('http://', 'https://')
     encryption_enabled = config.get('enable_encryption', False)
 
     if isinstance(images, list):
         decrypted = []
         for img in images:
             if isinstance(img, str):
+                if img.lower().startswith(http_prefixes):
+                    decrypted.append(img)
+                    continue
                 if not img.lower().endswith(image_extensions):
                     decrypted.append(img)
                     continue
 
-                result = decrypt_and_display(img)
+                result = decrypt_and_display(img, request=request)
                 if result is not None:
                     decrypted.append(result)
                 elif not encryption_enabled:
@@ -40,10 +44,13 @@ def _decrypt_images_for_display(images):
         return decrypted if decrypted else gr.skip()
 
     if isinstance(images, str):
+        if images.lower().startswith(http_prefixes):
+            return images
+
         if not images.lower().endswith(image_extensions):
             return images
 
-        result = decrypt_and_display(images)
+        result = decrypt_and_display(images, request=request)
         if result is not None:
             return result
         return gr.skip() if encryption_enabled else images
@@ -85,7 +92,7 @@ def bind_generation_pipeline(
             gr.update(visible=True, value="Added to queue..."),
         )
 
-    def poll_status():
+    def poll_status(request: gr.Request):
         state = queue_manager.get_status()
         q_len = queue_manager.get_queue_size()
         just_finished = queue_manager.consume_finished()
@@ -135,7 +142,7 @@ def bind_generation_pipeline(
         if imgs is None:
             imgs = gr.update(value=None)
         else:
-            imgs = _decrypt_images_for_display(imgs)
+            imgs = _decrypt_images_for_display(imgs, request=request)
 
         return (
             cmd,

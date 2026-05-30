@@ -118,29 +118,14 @@ class CommandRunner(CommonRunner):
 
     def _prepare_gallery_update(self, paths, skip_on_failure=False):
         """Returns image values that Gradio can display."""
-        if not self.enable_encryption:
-            return paths
-
-        from modules.utils.image_display import decrypt_and_display
-
         is_single = isinstance(paths, str)
         path_list = [paths] if is_single else paths
-        image_extensions = ('.png', '.jpg', '.jpeg', '.webp')
-
-        gallery_items = []
-        for path in path_list:
-            if (
-                not isinstance(path, str) or
-                not path.lower().endswith(image_extensions)
-            ):
-                gallery_items.append(path)
-                continue
-
-            result = decrypt_and_display(path)
-            if result is not None:
-                gallery_items.append(result)
-            elif not skip_on_failure:
-                gallery_items.append(path)
+        gallery_items = [
+            path for path in path_list
+            if not skip_on_failure or (
+                isinstance(path, str) and os.path.isfile(path)
+            )
+        ]
 
         if not gallery_items:
             return gr.skip() if skip_on_failure else paths

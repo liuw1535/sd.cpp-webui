@@ -73,7 +73,8 @@ class GalleryManager:
 
     def reload_gallery(
         self, page_num: int = 1, ctrl_inp: Optional[int] = None,
-        sort_inp: Optional[str] = None, selected_index: Optional[int] = None
+        sort_inp: Optional[str] = None, selected_index: Optional[int] = None,
+        request: gr.Request = None
     ) -> Tuple[gr.update, int]:
         """Reloads the gallery block to a specific page."""
 
@@ -114,7 +115,7 @@ class GalleryManager:
                 continue
 
             try:
-                img = decrypt_and_display(path)
+                img = decrypt_and_display(path, request=request)
                 gallery_items.append(img if img is not None else path)
             except Exception as e:
                 print(f"Failed to load image {path}: {e}")
@@ -144,7 +145,7 @@ class GalleryManager:
         )
 
     def _navigate_page(
-        self, direction: int
+        self, direction: int, request: gr.Request = None
     ) -> Tuple[gr.update, int]:
         """Helper for next/prev/last page navigation."""
         files = self._get_sorted_files()
@@ -166,19 +167,19 @@ class GalleryManager:
         elif direction == 0:  # Go to last page
             self.page_num = total_pages
 
-        return self.reload_gallery(page_num=self.page_num)
+        return self.reload_gallery(page_num=self.page_num, request=request)
 
-    def next_page(self):
+    def next_page(self, request: gr.Request = None):
         """Moves to the next gallery page."""
-        return self._navigate_page(1)
+        return self._navigate_page(1, request=request)
 
-    def prev_page(self):
+    def prev_page(self, request: gr.Request = None):
         """Moves to the previous gallery page."""
-        return self._navigate_page(-1)
+        return self._navigate_page(-1, request=request)
 
-    def last_page(self):
+    def last_page(self, request: gr.Request = None):
         """Moves to the last gallery page."""
-        return self._navigate_page(0)
+        return self._navigate_page(0, request=request)
 
     def get_media_info(self, sel_data: gr.SelectData) -> Tuple[Any, ...]:
         """Reads and parses generation data from a selected media."""
@@ -237,10 +238,12 @@ class GalleryManager:
             self.current_media_path, raw_text or "", btn_update
         )
 
-    def convert_to_mp4(self) -> Tuple[gr.update, int]:
+    def convert_to_mp4(
+        self, request: gr.Request = None
+    ) -> Tuple[gr.update, int]:
         """Converts the currently selected .avi file to an .mp4 file."""
         if not self.current_media_path or not self.current_media_path.lower().endswith('.avi'):
-            return self.reload_gallery(page_num=self.page_num)
+            return self.reload_gallery(page_num=self.page_num, request=request)
 
         out_path = os.path.splitext(self.current_media_path)[0] + '.mp4'
 
@@ -257,9 +260,9 @@ class GalleryManager:
                 print(f"\nFFmpeg conversion failed: {e.stderr.decode()}\n")
 
         # Reload the gallery to surface the new MP4 file
-        return self.reload_gallery(page_num=self.page_num)
+        return self.reload_gallery(page_num=self.page_num, request=request)
 
-    def delete_media(self) -> Tuple[Any, ...]:
+    def delete_media(self, request: gr.Request = None) -> Tuple[Any, ...]:
         """
         Deletes the currently selected media. It then selects the previous
         media, or the next if the first was deleted. If the gallery becomes
@@ -270,7 +273,7 @@ class GalleryManager:
                 not os.path.exists(self.current_media_path) or
                 self.selected_media_global_index is None):
             gallery_update, page_num = self.reload_gallery(
-                page_num=self.page_num
+                page_num=self.page_num, request=request
             )
 
             return (
@@ -295,7 +298,9 @@ class GalleryManager:
             self.selected_media_index_on_page = None
             self.selected_media_global_index = None
 
-            gallery_update, page_num = self.reload_gallery(page_num=1)
+            gallery_update, page_num = self.reload_gallery(
+                page_num=1, request=request
+            )
 
             return (
                 gallery_update, page_num,
@@ -312,7 +317,8 @@ class GalleryManager:
         new_page_index = new_global_index % PAGE_SIZE
 
         gallery_update, page_num = self.reload_gallery(
-            page_num=new_page_num, selected_index=new_page_index
+            page_num=new_page_num, selected_index=new_page_index,
+            request=request
         )
 
         self.selected_media_global_index = new_global_index
