@@ -132,6 +132,19 @@ class CommandRunner(CommonRunner):
 
         return gallery_items[0] if is_single else gallery_items
 
+    def _prepare_preview_update(self):
+        """Returns a transient preview image without creating an HTTP URL."""
+        if not self.preview_path or not os.path.isfile(self.preview_path):
+            return gr.skip()
+
+        from modules.utils.image_display import load_preview_image
+
+        preview_image = load_preview_image(self.preview_path)
+        if preview_image is None:
+            return gr.skip()
+
+        return [preview_image]
+
     def build_command(self):
         """
         Main method to build the command.
@@ -168,12 +181,7 @@ class CommandRunner(CommonRunner):
                     f"Last Speed: {stats.get('last_speed', 'N/A')}"
                 )
             else:
-                if self.preview_path and os.path.isfile(self.preview_path):
-                    gallery_update = self._prepare_gallery_update(
-                        [self.preview_path], skip_on_failure=True
-                    )
-                else:
-                    gallery_update = gr.skip()
+                gallery_update = self._prepare_preview_update()
 
                 yield (
                     self.fcommand,
