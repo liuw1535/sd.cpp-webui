@@ -109,7 +109,9 @@ class ConfigManager:
         'def_llm': 'txt_enc_dir',
     }
 
-    def __init__(self, config_path: str = None):
+    def __init__(self, config_path: str = None, prompts_path: str = None):
+        # prompts_path is accepted for compatibility with older callers;
+        # prompt storage is managed by PromptManager.
         self.config_path = os.getenv(
             'SD_WEBUI_CONFIG_PATH', config_path or DEFAULT_CONFIG_PATH
         )
