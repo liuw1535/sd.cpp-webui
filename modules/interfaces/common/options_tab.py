@@ -59,7 +59,6 @@ registry = SettingsRegistry(config)
 
 
 with gr.Blocks() as options_block:
-    settings_map = {}
     # Title
     options_title = gr.Markdown("# Options")
 
@@ -215,20 +214,22 @@ with gr.Blocks() as options_block:
 
         with gr.Accordion(label="Encryption Settings", open=False):
             with gr.Row():
-                enable_encryption = gr.Checkbox(
-                    label="Enable Image Encryption",
-                    value=config.get('enable_encryption', False),
-                    interactive=True
+                registry.register(
+                    'enable_encryption', gr.Checkbox(
+                        label="Enable Image Encryption",
+                        value=config.get('enable_encryption', False),
+                        interactive=True
+                    )
                 )
-                settings_map['enable_encryption'] = enable_encryption
             with gr.Row():
-                encryption_password = gr.Textbox(
-                    label="Encryption Password",
-                    value=config.get('encryption_password', '123'),
-                    interactive=True,
-                    type="password"
+                registry.register(
+                    'encryption_password', gr.Textbox(
+                        label="Encryption Password",
+                        value=config.get('encryption_password', '123'),
+                        interactive=True,
+                        type="password"
+                    )
                 )
-                settings_map['encryption_password'] = encryption_password
 
         with gr.Row():
             # Output options
