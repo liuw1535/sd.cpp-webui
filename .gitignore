@@ -1,5 +1,4 @@
 __pycache__/
-user_data/
 *.ckpt
 *.safetensors
 *.pth
@@ -18,3 +17,15 @@ sd*
 !sd*.py
 !*.ps1
 /venv
+
+user_data/
+
+!defaults/*.json
+
+outputs/commands/command_*.txt
+outputs/pprompts/pprompt_*.txt
+outputs/nprompts/nprompt_*.txt
+
+!outputs/commands/commands.txt
+!outputs/pprompts/pprompts.txt
+!outputs/nprompts/nprompts.txt

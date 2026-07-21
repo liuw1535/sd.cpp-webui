@@ -12,6 +12,26 @@ def create_performance_ui():
     with gr.Accordion(
         label="Performance", open=False
     ):
+        backend_table = gr.Dataframe(
+                headers=["Component", "Device"],
+                datatype=["str", "str"],
+                value=config.get('def_backend_table'),
+                interactive=True,
+                row_count=(5, "dynamic"),
+                column_count=(2, "fixed"),
+                label="Backend Configuration",
+                type="array"
+            )
+        params_backend_table = gr.Dataframe(
+                headers=["Component", "Device"],
+                datatype=["str", "str"],
+                value=config.get('def_params_backend_table'),
+                interactive=True,
+                row_count=(5, "dynamic"),
+                column_count=(2, "fixed"),
+                label="Parameters Backend Configuration",
+                type="array"
+            )
         threads = gr.Number(
             label="Threads",
             minimum=0,
@@ -19,10 +39,6 @@ def create_performance_ui():
             value=0
         )
         with gr.Group():
-            offload_to_cpu = gr.Checkbox(
-                label="Offload to CPU",
-                value=config.get('def_offload_to_cpu')
-            )
             max_vram = gr.Slider(
                 label="Max VRAM budget (GiB) for segmented graph execution",
                 value=config.get('def_max_vram'),
@@ -30,13 +46,13 @@ def create_performance_ui():
                 minimum=-1,
                 step=0.1
             )
-            vae_cpu = gr.Checkbox(
-                label="VAE on CPU",
-                value=config.get('def_vae_cpu')
+            stream_layers = gr.Checkbox(
+                label="Stream layers",
+                value=config.get('def_stream_layers')
             )
-            clip_cpu = gr.Checkbox(
-                label="CLIP on CPU",
-                value=config.get('def_clip_cpu')
+            eager_load = gr.Checkbox(
+                label="Eager load",
+                value=config.get('def_eager_load')
             )
 
         with gr.Group():
@@ -64,9 +80,10 @@ def create_performance_ui():
     return {
         'in_threads': threads,
         'in_max_vram': max_vram,
-        'in_offload_to_cpu': offload_to_cpu,
-        'in_vae_cpu': vae_cpu,
-        'in_clip_cpu': clip_cpu,
+        'in_stream_layers': stream_layers,
+        'in_eager_load': eager_load,
+        'in_backend_table': backend_table,
+        'in_params_backend_table': params_backend_table,
         'in_flash_attn': flash_attn,
         'in_diffusion_fa': diffusion_fa,
         'in_diffusion_conv_direct': diffusion_conv_direct,

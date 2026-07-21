@@ -15,6 +15,31 @@ from modules.utils.ui_state import (
 from .constants import RELOAD_SYMBOL
 
 
+def _get_initial_diffusion_mode():
+    """
+    Determine which tab should be active based on loaded session defaults.
+    Prefers user configuration if both or neither tabs have defaults.
+    """
+    ckpt_keys = ('def_ckpt', 'def_ckpt_vae')
+    unet_keys = ('def_unet', 'def_unet_vae', 'def_uncond_unet',
+                 'def_clip_g', 'def_clip_l', 'def_t5xxl',
+                 'def_llm', 'def_llm_vision')
+
+    has_ckpt = any(get_session_value(k) is not None for k in ckpt_keys)
+    has_unet = any(get_session_value(k) is not None for k in unet_keys)
+
+    # 1. If ONLY ONE tab has values, prioritize that tab
+    if has_unet and not has_ckpt:
+        return 1
+    if has_ckpt and not has_unet:
+        return 0
+
+    # 2. If BOTH or NEITHER have values, defer to the config setting
+    preferred_tab = config.get('def_model_tab')
+
+    return 1 if preferred_tab == 'unet' else 0
+
+
 def create_model_widget(
     label, dir_key, option_key, **kwargs
 ):
@@ -113,7 +138,7 @@ def create_ckpt_model_sel_ui():
 def create_unet_model_sel_ui():
     """Create the UNET model selection UI using a helper for clarity"""
     with gr.Row():
-        gr.Markdown("Supports: SD3, SD3.5, FLUX.1-Krea-dev, FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, Chroma, Qwen Image, Z-Image-Turbo")
+        gr.Markdown("Supports: SD3, SD3.5, FLUX.1-Krea-dev, FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, Chroma, Qwen Image, Z-Image-Turbo, Anima, Ernie Image, Ideogram 4")
     with gr.Row():
         with gr.Column():
             unet_model = create_model_widget(
@@ -127,6 +152,12 @@ def create_unet_model_sel_ui():
                 dir_key='vae_dir',
                 option_key='def_unet_vae',
             )
+    with gr.Row():
+        uncond_unet_model = create_model_widget(
+            label="Unconditional UNET Model",
+            dir_key='unet_dir',
+            option_key='def_uncond_unet',
+        )
     with gr.Row():
         with gr.Column():
             clip_g = create_model_widget(
@@ -162,6 +193,7 @@ def create_unet_model_sel_ui():
     return {
         'in_unet_model': unet_model,
         'in_unet_vae': unet_vae,
+        'in_uncond_unet_model': uncond_unet_model,
         'in_clip_g': clip_g,
         'in_clip_l': clip_l,
         'in_t5xxl': t5xxl,
@@ -172,10 +204,13 @@ def create_unet_model_sel_ui():
 
 def create_img_model_sel_ui():
     """Create the image model selection UI."""
-    diffusion_mode = gr.Number(value=0, visible=False)
+    initial_mode = _get_initial_diffusion_mode()
+    diffusion_mode = gr.Number(value=initial_mode, visible=False)
     model_inputs = {'in_diffusion_mode': diffusion_mode}
 
-    with gr.Tabs() as model_tabs:
+    initial_tab = "unet" if initial_mode == 1 else "checkpoint"
+
+    with gr.Tabs(selected=initial_tab) as model_tabs:
         with gr.Tab("Checkpoint", id="checkpoint") as ckpt_tab:
             ckpt_inputs = create_ckpt_model_sel_ui()
             model_inputs.update(ckpt_inputs)
