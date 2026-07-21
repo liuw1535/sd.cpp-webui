@@ -2,6 +2,7 @@
 
 import os
 import re
+import shlex
 import sys
 import subprocess
 from typing import Dict, Any, Generator
@@ -238,7 +239,7 @@ class CommandRunner(CommonRunner):
         """
         # Prepare a copy for printing (shows actual .txt paths)
         cmd_print = self.command.copy()
-        self.fcommand = ' '.join(map(str, cmd_print))
+        self.fcommand = shlex.join(cmd_print)
 
         # Compute all output filenames
         batch_count = self._get_param('in_batch_count', 1)

@@ -1,5 +1,6 @@
 """sd.cpp-webui - core - stable-diffusion.cpp server manager"""
 
+import shlex
 import threading
 from typing import Dict, Any
 
@@ -52,7 +53,7 @@ class ServerRunner(CommonRunner):
 
     def _prepare_for_run(self):
         """Prepares the final command string for printing."""
-        self.fcommand = ' '.join(map(str, self.command))
+        self.fcommand = shlex.join(self.command)
 
     def run(self):
         """Starts the server thread and handles initial setup/logging."""
