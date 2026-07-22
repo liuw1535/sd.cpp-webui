@@ -268,17 +268,19 @@ class CommandRunner(CommonRunner):
         return gallery_items[0] if is_single else gallery_items
 
     def _prepare_preview_update(self):
-        """Returns a transient preview image without creating an HTTP URL."""
+        """Returns the transient preview path for request-time display.
+
+        Returning a PIL image makes Gradio serialize the preview into its cache
+        directory (for example /tmp/gradio). When encryption is enabled, that
+        cache write stores decrypted preview pixels as plaintext. Keep the
+        preview as a path here; the polling event later converts encrypted image
+        paths into signed, in-memory HTTP responses with the current request
+        context.
+        """
         if not self.preview_path or not os.path.isfile(self.preview_path):
             return gr.skip()
 
-        from modules.utils.image_display import load_preview_image
-
-        preview_image = load_preview_image(self.preview_path)
-        if preview_image is None:
-            return gr.skip()
-
-        return [preview_image]
+        return [self.preview_path]
 
     def build_command(self):
         """
